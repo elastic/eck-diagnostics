@@ -1,6 +1,13 @@
 SHELL := /bin/bash
-export VERSION ?= v1.0.0
+export VERSION ?= 1.0.0
 export GOBIN = $(shell pwd)/bin
+
+SNAPSHOT ?= true
+TAG ?= $(shell git rev-parse --short=8 --verify HEAD)
+LDFLAGS ?= -X github.com/elastic/eck-diagnostics/internal.buildVersion=$(VERSION) \
+	-X github.com/elastic/eck-diagnostics/internal.buildHash=$(TAG) \
+	-X github.com/elastic/eck-diagnostics/internal.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')) \
+	-X github.com/elastic/eck-diagnostics/internal.snapshotBuild=$(SNAPSHOT)
 
 BINARY := eck-diagnostics
 
@@ -8,7 +15,7 @@ all: bin/eck-diagnostics NOTICE.txt
 
 # build
 bin/eck-diagnostics: lint
-	@ GCO_ENABLED=0 go build -o $(GOBIN)/eck-diagnostics github.com/elastic/eck-diagnostics/cmd
+	@ GCO_ENABLED=0 go build -o $(GOBIN)/eck-diagnostics -ldflags="$(LDFLAGS)" github.com/elastic/eck-diagnostics/cmd
 
 NOTICE.txt: $(GOBIN)/go-licence-detector
 	@ go list -m -json all | $(GOBIN)/go-licence-detector \

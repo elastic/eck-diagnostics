@@ -28,16 +28,16 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/cli-runtime/pkg/resource"
-
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
+	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
@@ -78,6 +78,7 @@ func NewKubectl(kubeConfig string) (*Kubectl, error) {
 	}, nil
 }
 
+// CheckNamespaces verifies that all namespaces in nss exist.
 func (c Kubectl) CheckNamespaces(ctx context.Context, nss []string) error {
 	clientSet, err := c.factory.KubernetesClientSet()
 	if err != nil {
@@ -91,6 +92,7 @@ func (c Kubectl) CheckNamespaces(ctx context.Context, nss []string) error {
 	return nil
 }
 
+//Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
 func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
 	r, err := c.getResources(resource, namespace)
 	if err != nil {
@@ -109,6 +111,7 @@ func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
 	return printer.PrintObj(obj, w)
 }
 
+//getResources retrieves the K8s objects of type resource and returns a resource.Result.
 func (c Kubectl) getResources(resource string, namespace string) (*resource.Result, error) {
 	r := c.factory.NewBuilder().
 		Unstructured().
@@ -126,6 +129,8 @@ func (c Kubectl) getResources(resource string, namespace string) (*resource.Resu
 	return r, nil
 }
 
+//GetMeta retrieves the metadata for the K8s objects of type resource and marshals them into writer w.
+// It tries to elide sensitive data like secret contents or kubectl last-applied configuration annotations.
 func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
 	r := c.factory.NewBuilder().
 		Unstructured().
@@ -180,6 +185,7 @@ func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
 	return err
 }
 
+//Describe mimics "kubectl describe" and writes the result to writer w.
 func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error {
 	r := c.factory.NewBuilder().
 		Unstructured().
@@ -215,6 +221,7 @@ func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error
 	return nil
 }
 
+//Logs mimics "kubectl logs -l elector" and writes the result to writers produced by out when given a filename.
 func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Writer, error)) error {
 	builder := c.factory.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
@@ -249,6 +256,7 @@ func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Wr
 	return nil
 }
 
+// requestLogs requests the logs for pod and writes the result to writers produced by out when given a filename.
 func (c Kubectl) requestLogs(pod corev1.Pod, out func(string) (io.Writer, error)) error {
 	logFn := polymorphichelpers.LogsForObjectFn
 	reqs, err := logFn(c.factory, &pod, &corev1.PodLogOptions{}, 20*time.Second, true)
@@ -267,6 +275,7 @@ func (c Kubectl) requestLogs(pod corev1.Pod, out func(string) (io.Writer, error)
 	return nil
 }
 
+// streamLogs when given a ResponseWrapper streams the result to out adding textual start and end markers.
 func streamLogs(nsn types.NamespacedName, request rest.ResponseWrapper, out io.Writer) error {
 	stream, err := request.Stream(context.Background())
 	if err != nil {
@@ -293,9 +302,18 @@ func streamLogs(nsn types.NamespacedName, request rest.ResponseWrapper, out io.W
 	}
 }
 
-func (c Kubectl) Version(out io.Writer) error {
-	// TODO dump the diagnostic tools own version
+// versionInfo exists to marshal both eck-diagnostics version information and K8s server version information.
+type versionInfo struct {
+	DiagnosticsVersion DiagnosticsVersion
+	ServerVersion      *version.Info
+}
 
+// Version is inspired by "kubectl version" but includes version information about this tool in addition to K8s
+// server version information. 
+func (c Kubectl) Version(out io.Writer) error {
+	v := versionInfo{
+		DiagnosticsVersion: about(),
+	}
 	client, err := c.factory.ToDiscoveryClient()
 	if err != nil {
 		return err
@@ -306,7 +324,8 @@ func (c Kubectl) Version(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	bytes, err := json.MarshalIndent(serverVersion, "", "  ")
+	v.ServerVersion = serverVersion
+	bytes, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}

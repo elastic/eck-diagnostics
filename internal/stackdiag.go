@@ -56,16 +56,20 @@ const (
 var (
 	//go:embed job.tpl.yml
 	jobTemplate        string
+	// jobTimeout governs how long at most diagnostic data extraction may take.
 	jobTimeout         = 10 * time.Minute
+	// jobPollingInterval is used to configure the informer used to be notified of Pod status changes.
 	jobPollingInterval = 10 * time.Second
 )
 
+// diagJob represents a pod whose job it is to extract diagnostic data from an Elasticsearch cluster.
 type diagJob struct {
 	podName string
 	esName  string
 	done    bool
 }
 
+// diagJobState captures the state of running a set of job to extract diagnostics from Elasticsearch.
 type diagJobState struct {
 	ns         string
 	clientSet  *kubernetes.Clientset
@@ -77,6 +81,7 @@ type diagJobState struct {
 	verbose    bool
 }
 
+// newDiagJobState create a new state struct to run diagnostic Pods.
 func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
@@ -98,6 +103,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 	}
 }
 
+// scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster esName.
 func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 	podName := fmt.Sprintf("%s-diag", esName)
 	tpl, err := template.New("job").Parse(jobTemplate)
@@ -141,6 +147,8 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 	return nil
 }
 
+// extractJobResults runs an informer to be notified of Pod status changes and extract diagnostic data from any Pod
+// that has reached running state.
 func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 	ds.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -245,12 +253,13 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 	return nil
 }
 
+// untarIntoZip extracts the files transferred via tar from the POd into the given ZipFile.
 func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file *ZipFile) error {
 	tarReader := tar.NewReader(reader)
 	for {
 		header, err := tarReader.Next()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if !errors.Is(err, io.EOF) {
 				return err
 			}
 			break
@@ -285,12 +294,14 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file 
 	return nil
 }
 
+// completeJob marks the given job as done and deletes the corresponding Pod.
 func (ds *diagJobState) completeJob(job *diagJob) error {
 	logger.Printf("Elasticsearch diagnostics extracted for cluster %s/%s\n", ds.ns, job.esName)
 	job.done = true
 	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ds.context, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 }
 
+// repackageTarGzip repackages the *.tar.gz archives produced by the Elasticsearch diagnostic tool into the given ZipFile.
 func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *ZipFile) error {
 	gzReader, err := gzip.NewReader(in)
 	if err != nil {
@@ -301,7 +312,7 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 	for {
 		header, err := tarReader.Next()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if !errors.Is(err, io.EOF) {
 				return err
 			}
 			break
@@ -331,6 +342,8 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 	return nil
 }
 
+// runElasticsearchDiagnostics extracts diagnostic data from all clusters in ns using the official Elasticsearch
+// support diagnostics.
 func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) error {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {

@@ -34,6 +34,8 @@ var (
 	logger = log.New(os.Stdout, "", log.LstdFlags)
 )
 
+// DumpParams is a collection of parameters controlling the extraction of diagnostic data.
+// see main command for explanation of individual parameters.
 type DumpParams struct {
 	Kubeconfig          string
 	OperatorNamespaces  []string
@@ -42,6 +44,7 @@ type DumpParams struct {
 	Verbose             bool
 }
 
+// AllNamespaces return a slice containing all namespaces from which we want to extract diagnostic data.
 func (dp DumpParams) AllNamespaces() []string {
 	nss := make([]string, 0, len(dp.ResourcesNamespaces)+len(dp.OperatorNamespaces))
 	nss = append(nss, dp.ResourcesNamespaces...)
@@ -49,8 +52,11 @@ func (dp DumpParams) AllNamespaces() []string {
 	return nss
 }
 
+// RunDump extracts diagnostic information based on the given params. 
+// It produces a zip file with the contents as a side effect.
 func RunDump(params DumpParams) error {
 	logger.Printf("ECK diagnostics with %+v", params)
+
 	kubectl, err := NewKubectl(params.Kubeconfig)
 	if err != nil {
 		return err
@@ -159,6 +165,7 @@ func RunDump(params DumpParams) error {
 	return zipFile.Close()
 }
 
+// getLogs extracts logs from all Pods that match the given selectors in the namespace ns and adds them to zipFile.
 func getLogs(k *Kubectl, zipFile *ZipFile, ns string, selector ...string) error {
 	for _, s := range selector {
 		if err := k.Logs(ns, s, zipFile.Create); err != nil {
@@ -168,6 +175,8 @@ func getLogs(k *Kubectl, zipFile *ZipFile, ns string, selector ...string) error 
 	return nil
 }
 
+// getResources produces a map of filenames to functions that will when invoked retrieve the resources identified by rs
+// and add write them to a writer passed to said functions.
 func getResources(k *Kubectl, ns string, rs []string) map[string]func(io.Writer) error {
 	m := map[string]func(io.Writer) error{}
 	for _, r := range rs {
@@ -179,13 +188,15 @@ func getResources(k *Kubectl, ns string, rs []string) map[string]func(io.Writer)
 	return m
 }
 
+//ZipFile wraps a zip.Writer to add a few convenience functions and implement resource closing.
 type ZipFile struct {
 	*zip.Writer
 	underlying io.Closer
 }
 
-func NewZipFile(path string) (*ZipFile, error) {
-	f, err := os.Create(path)
+// NewZipFile create a new zip file at fileName.
+func NewZipFile(fileName string) (*ZipFile, error) {
+	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -196,12 +207,15 @@ func NewZipFile(path string) (*ZipFile, error) {
 	}, nil
 }
 
+//Close closes the zip.Writer and the underlying file.
 func (z ZipFile) Close() error {
 	// TODO aggregate error?
 	defer z.underlying.Close()
 	return z.Writer.Close()
 }
 
+//add takes a map of file names and functions to evaluate with the intent to add the result of the evaluation to the
+// zip file at the name used as key in the map.
 func (z ZipFile) add(fns map[string]func(io.Writer) error) error {
 	for k, f := range fns {
 		fw, err := z.Create(k)
@@ -215,6 +229,7 @@ func (z ZipFile) add(fns map[string]func(io.Writer) error) error {
 	return nil
 }
 
+// diagnosticFilename calculates a file name to be used for the diagnostic archive based on the current time.
 func diagnosticFilename(dir string) string {
 	file := fmt.Sprintf("eck-diagnostic-%s.zip", time.Now().Format("2006-01-02T15-04-05"))
 	if dir != "" {
