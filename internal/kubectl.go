@@ -92,7 +92,7 @@ func (c Kubectl) CheckNamespaces(ctx context.Context, nss []string) error {
 	return nil
 }
 
-//Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
 func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
 	r, err := c.getResources(resource, namespace)
 	if err != nil {
@@ -111,7 +111,7 @@ func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
 	return printer.PrintObj(obj, w)
 }
 
-//getResources retrieves the K8s objects of type resource and returns a resource.Result.
+// getResources retrieves the K8s objects of type resource and returns a resource.Result.
 func (c Kubectl) getResources(resource string, namespace string) (*resource.Result, error) {
 	r := c.factory.NewBuilder().
 		Unstructured().
@@ -129,7 +129,7 @@ func (c Kubectl) getResources(resource string, namespace string) (*resource.Resu
 	return r, nil
 }
 
-//GetMeta retrieves the metadata for the K8s objects of type resource and marshals them into writer w.
+// GetMeta retrieves the metadata for the K8s objects of type resource and marshals them into writer w.
 // It tries to elide sensitive data like secret contents or kubectl last-applied configuration annotations.
 func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
 	r := c.factory.NewBuilder().
@@ -185,7 +185,7 @@ func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
 	return err
 }
 
-//Describe mimics "kubectl describe" and writes the result to writer w.
+// Describe mimics "kubectl describe" and writes the result to writer w.
 func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error {
 	r := c.factory.NewBuilder().
 		Unstructured().
@@ -221,7 +221,7 @@ func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error
 	return nil
 }
 
-//Logs mimics "kubectl logs -l elector" and writes the result to writers produced by out when given a filename.
+// Logs mimics "kubectl logs -l elector" and writes the result to writers produced by out when given a filename.
 func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Writer, error)) error {
 	builder := c.factory.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).

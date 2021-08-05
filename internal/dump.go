@@ -72,6 +72,14 @@ func RunDump(params DumpParams) error {
 		return err
 	}
 
+	defer func() {
+		err := zipFile.Close()
+		if err != nil {
+			logger.Println(err.Error())
+		}
+		logger.Printf("ECK diagnostics written to %s\n", zipFileName)
+	}()
+
 	if err := zipFile.add(map[string]func(io.Writer) error{
 		"version.json": func(writer io.Writer) error {
 			return kubectl.Version(writer)
@@ -159,10 +167,7 @@ func RunDump(params DumpParams) error {
 			return err
 		}
 	}
-	defer func() {
-		logger.Printf("ECK diagnostics written to %s\n", zipFileName)
-	}()
-	return zipFile.Close()
+	return nil
 }
 
 // getLogs extracts logs from all Pods that match the given selectors in the namespace ns and adds them to zipFile.
