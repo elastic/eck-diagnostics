@@ -38,6 +38,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
@@ -55,9 +56,9 @@ const (
 
 var (
 	//go:embed job.tpl.yml
-	jobTemplate        string
+	jobTemplate string
 	// jobTimeout governs how long at most diagnostic data extraction may take.
-	jobTimeout         = 10 * time.Minute
+	jobTimeout = 10 * time.Minute
 	// jobPollingInterval is used to configure the informer used to be notified of Pod status changes.
 	jobPollingInterval = 10 * time.Second
 )
@@ -130,7 +131,6 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 		return err
 	}
 
-	// TODO deal with cache delay
 	err = ds.clientSet.CoreV1().Pods(ds.ns).Delete(context.Background(), podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
@@ -150,6 +150,7 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 // extractJobResults runs an informer to be notified of Pod status changes and extract diagnostic data from any Pod
 // that has reached running state.
 func (ds *diagJobState) extractJobResults(file *ZipFile) error {
+	var errs []error
 	ds.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if pod, ok := obj.(*corev1.Pod); ok && ds.verbose {
@@ -205,18 +206,18 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 					defer outStream.Close()
 					err := options.Run()
 					if err != nil {
-						println(err.Error())
+						errs = append(errs, err)
 						return
 					}
 				}()
 				err := ds.untarIntoZip(reader, job.esName, file)
 				if err != nil {
-					logger.Println(err.Error())
+					errs = append(errs, err)
 					return
 				}
 				err = ds.completeJob(job)
 				if err != nil {
-					logger.Println(err.Error())
+					errs = append(errs, err)
 					return
 				}
 			case corev1.PodSucceeded:
@@ -250,7 +251,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 		},
 	})
 	ds.informer.Run(ds.context.Done())
-	return nil
+	return utilerrors.NewAggregate(errs)
 }
 
 // untarIntoZip extracts the files transferred via tar from the POd into the given ZipFile.

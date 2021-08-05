@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/errors"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // auth on gke
 )
 
@@ -52,7 +53,7 @@ func (dp DumpParams) AllNamespaces() []string {
 	return nss
 }
 
-// RunDump extracts diagnostic information based on the given params. 
+// RunDump extracts diagnostic information based on the given params.
 // It produces a zip file with the contents as a side effect.
 func RunDump(params DumpParams) error {
 	logger.Printf("ECK diagnostics with %+v", params)
@@ -193,7 +194,7 @@ func getResources(k *Kubectl, ns string, rs []string) map[string]func(io.Writer)
 	return m
 }
 
-//ZipFile wraps a zip.Writer to add a few convenience functions and implement resource closing.
+// ZipFile wraps a zip.Writer to add a few convenience functions and implement resource closing.
 type ZipFile struct {
 	*zip.Writer
 	underlying io.Closer
@@ -212,14 +213,13 @@ func NewZipFile(fileName string) (*ZipFile, error) {
 	}, nil
 }
 
-//Close closes the zip.Writer and the underlying file.
+// Close closes the zip.Writer and the underlying file.
 func (z ZipFile) Close() error {
-	// TODO aggregate error?
-	defer z.underlying.Close()
-	return z.Writer.Close()
+	errs := []error{z.Writer.Close(), z.underlying.Close()}
+	return errors.NewAggregate(errs)
 }
 
-//add takes a map of file names and functions to evaluate with the intent to add the result of the evaluation to the
+// add takes a map of file names and functions to evaluate with the intent to add the result of the evaluation to the
 // zip file at the name used as key in the map.
 func (z ZipFile) add(fns map[string]func(io.Writer) error) error {
 	for k, f := range fns {

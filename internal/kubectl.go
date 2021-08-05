@@ -309,7 +309,7 @@ type versionInfo struct {
 }
 
 // Version is inspired by "kubectl version" but includes version information about this tool in addition to K8s
-// server version information. 
+// server version information.
 func (c Kubectl) Version(out io.Writer) error {
 	v := versionInfo{
 		DiagnosticsVersion: about(),
