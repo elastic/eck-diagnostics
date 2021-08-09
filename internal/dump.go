@@ -57,7 +57,6 @@ func (dp DumpParams) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func RunDump(params DumpParams) error {
 	logger.Printf("ECK diagnostics with %+v", params)
-
 	kubectl, err := NewKubectl(params.Kubeconfig)
 	if err != nil {
 		return err
