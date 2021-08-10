@@ -22,12 +22,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+
 	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // auth on gke
 )
 
@@ -38,6 +40,7 @@ var (
 // DumpParams is a collection of parameters controlling the extraction of diagnostic data.
 // see main command for explanation of individual parameters.
 type DumpParams struct {
+	ECKVersion          string
 	Kubeconfig          string
 	OperatorNamespaces  []string
 	ResourcesNamespaces []string
@@ -63,6 +66,11 @@ func RunDump(params DumpParams) error {
 	}
 
 	if err := kubectl.CheckNamespaces(context.Background(), params.AllNamespaces()); err != nil {
+		return err
+	}
+
+	clientSet, err := kubectl.factory.KubernetesClientSet()
+	if err != nil {
 		return err
 	}
 
@@ -97,8 +105,13 @@ func RunDump(params DumpParams) error {
 		return err
 	}
 
+	operatorVersions := make([]*version.Version, 0, len(params.OperatorNamespaces))
+
 	for _, ns := range params.OperatorNamespaces {
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
+
+		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
+
 		if err := zipFile.add(getResources(kubectl, ns, []string{
 			"statefulsets",
 			"pods",
@@ -124,6 +137,9 @@ func RunDump(params DumpParams) error {
 		}
 	}
 
+	minOperatorVersion := min(operatorVersions)
+	logger.Printf("ECK version is %v\n", minOperatorVersion)
+
 	for _, ns := range params.ResourcesNamespaces {
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
 		if err := zipFile.add(getResources(kubectl, ns, []string{
@@ -143,22 +159,44 @@ func RunDump(params DumpParams) error {
 			"kibana",
 			"elasticsearch",
 			"apmserver",
-			"enterprisesearch",
-			"beat",
-			"agent",
-			"elasticmapsserver",
 		})); err != nil {
 			return err
+		}
+
+		if minOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
+			if err := zipFile.add(getResources(kubectl, ns, []string{
+				"enterprisesearch",
+				"beat",
+			})); err != nil {
+				return err
+			}
+		}
+
+		if minOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
+			if err := zipFile.add(getResources(kubectl, ns, []string{
+				"agent",
+			})); err != nil {
+				return err
+			}
+		}
+
+		if minOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
+			if err := zipFile.add(getResources(kubectl, ns, []string{
+				"elasticmapsserver",
+			})); err != nil {
+				return err
+			}
 		}
 
 		if err := getLogs(kubectl, zipFile, ns,
 			"common.k8s.elastic.co/type=elasticsearch",
 			"common.k8s.elastic.co/type=kibana",
 			"common.k8s.elastic.co/type=apm-server",
-			"common.k8s.elastic.co/type=enterprise-search",
-			"common.k8s.elastic.co/type=beat",
-			"common.k8s.elastic.co/type=agent",
-			"common.k8s.elastic.co/type=maps",
+			// the below where introduced in later version but label selector will just return no result:
+			"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
+			"common.k8s.elastic.co/type=beat",              // 1.2.0
+			"common.k8s.elastic.co/type=agent",             // 1.4.0
+			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		); err != nil {
 			return err
 		}

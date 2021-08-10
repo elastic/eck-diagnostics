@@ -40,6 +40,7 @@ func main() {
 	}
 	cmd.Flags().StringArrayVarP(&dumpParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Namespace(s) in which operator(s) are running")
 	cmd.Flags().StringArrayVarP(&dumpParams.ResourcesNamespaces, "resources-namespaces", "r", []string{"default"}, "Namespace(s) in which resources are managed")
+	cmd.Flags().StringVar(&dumpParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&dumpParams.OutputDir, "output-directory", "", "Path where to output dump files")
 	cmd.Flags().StringVar(&dumpParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&dumpParams.Verbose, "verbose", false, "Verbose mode")

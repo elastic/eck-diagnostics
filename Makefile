@@ -14,7 +14,7 @@ BINARY := eck-diagnostics
 all: bin/eck-diagnostics NOTICE.txt
 
 # build
-bin/eck-diagnostics: lint
+bin/eck-diagnostics: unit
 	@ GCO_ENABLED=0 go build -o $(GOBIN)/eck-diagnostics -ldflags="$(LDFLAGS)" github.com/elastic/eck-diagnostics/cmd
 
 NOTICE.txt: $(GOBIN)/go-licence-detector
@@ -23,6 +23,10 @@ NOTICE.txt: $(GOBIN)/go-licence-detector
  		-noticeOut=NOTICE.txt \
  		-overrides=build/notice/overrides.json \
  		-includeIndirect
+
+.PHONY: unit
+unit: lint
+	@ go test -v ./...
 
 .PHONY: lint
 lint: $(GOBIN)/golangci-lint
