@@ -78,4 +78,3 @@ func max(versions []*version.Version) *version.Version {
 	}
 	return res
 }
-

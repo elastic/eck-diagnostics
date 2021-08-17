@@ -37,9 +37,9 @@ var (
 	logger = log.New(os.Stdout, "", log.LstdFlags)
 )
 
-// DumpParams is a collection of parameters controlling the extraction of diagnostic data.
+// Params is a collection of parameters controlling the extraction of diagnostic data.
 // See the main command for explanation of individual parameters.
-type DumpParams struct {
+type Params struct {
 	ECKVersion          string
 	Kubeconfig          string
 	OperatorNamespaces  []string
@@ -49,16 +49,16 @@ type DumpParams struct {
 }
 
 // AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
-func (dp DumpParams) AllNamespaces() []string {
+func (dp Params) AllNamespaces() []string {
 	nss := make([]string, 0, len(dp.ResourcesNamespaces)+len(dp.OperatorNamespaces))
 	nss = append(nss, dp.ResourcesNamespaces...)
 	nss = append(nss, dp.OperatorNamespaces...)
 	return nss
 }
 
-// RunDump extracts diagnostic information based on the given params.
+// Run extracts diagnostic information based on the given params.
 // It produces a zip file with the contents as a side effect.
-func RunDump(params DumpParams) error {
+func Run(params Params) error {
 	logger.Printf("ECK diagnostics with %+v", params)
 	kubectl, err := NewKubectl(params.Kubeconfig)
 	if err != nil {
