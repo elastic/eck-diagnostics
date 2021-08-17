@@ -38,7 +38,7 @@ var (
 )
 
 // DumpParams is a collection of parameters controlling the extraction of diagnostic data.
-// see main command for explanation of individual parameters.
+// See the main command for explanation of individual parameters.
 type DumpParams struct {
 	ECKVersion          string
 	Kubeconfig          string
@@ -48,7 +48,7 @@ type DumpParams struct {
 	Verbose             bool
 }
 
-// AllNamespaces return a slice containing all namespaces from which we want to extract diagnostic data.
+// AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
 func (dp DumpParams) AllNamespaces() []string {
 	nss := make([]string, 0, len(dp.ResourcesNamespaces)+len(dp.OperatorNamespaces))
 	nss = append(nss, dp.ResourcesNamespaces...)
@@ -137,8 +137,8 @@ func RunDump(params DumpParams) error {
 		}
 	}
 
-	minOperatorVersion := min(operatorVersions)
-	logger.Printf("ECK version is %v\n", minOperatorVersion)
+	maxOperatorVersion := max(operatorVersions)
+	logger.Printf("ECK version is %v\n", maxOperatorVersion)
 
 	for _, ns := range params.ResourcesNamespaces {
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
@@ -163,7 +163,7 @@ func RunDump(params DumpParams) error {
 			return err
 		}
 
-		if minOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
 			if err := zipFile.add(getResources(kubectl, ns, []string{
 				"enterprisesearch",
 				"beat",
@@ -172,7 +172,7 @@ func RunDump(params DumpParams) error {
 			}
 		}
 
-		if minOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
 			if err := zipFile.add(getResources(kubectl, ns, []string{
 				"agent",
 			})); err != nil {
@@ -180,7 +180,7 @@ func RunDump(params DumpParams) error {
 			}
 		}
 
-		if minOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
 			if err := zipFile.add(getResources(kubectl, ns, []string{
 				"elasticmapsserver",
 			})); err != nil {
@@ -237,7 +237,7 @@ type ZipFile struct {
 	underlying io.Closer
 }
 
-// NewZipFile create a new zip file at fileName.
+// NewZipFile creates a new zip file named fileName.
 func NewZipFile(fileName string) (*ZipFile, error) {
 	f, err := os.Create(fileName)
 	if err != nil {

@@ -58,13 +58,13 @@ func Test_min(t *testing.T) {
 					version.MustParseSemantic("1.5.0"),
 				},
 			},
-			want: version.MustParseSemantic("1.2.0"),
+			want: version.MustParseSemantic("1.5.0"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := min(tt.args.versions); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("min() = %v, want %v", got, tt.want)
+			if got := max(tt.args.versions); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("max() = %v, want %v", got, tt.want)
 			}
 		})
 	}

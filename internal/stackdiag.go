@@ -82,7 +82,7 @@ type diagJobState struct {
 	verbose    bool
 }
 
-// newDiagJobState create a new state struct to run diagnostic Pods.
+// newDiagJobState creates a new state struct to run diagnostic Pods.
 func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
@@ -254,7 +254,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// untarIntoZip extracts the files transferred via tar from the POd into the given ZipFile.
+// untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
 func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file *ZipFile) error {
 	tarReader := tar.NewReader(reader)
 	for {
@@ -343,8 +343,8 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 	return nil
 }
 
-// runElasticsearchDiagnostics extracts diagnostic data from all clusters in ns using the official Elasticsearch
-// support diagnostics.
+// runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
+// Elasticsearch support diagnostics.
 func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) error {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {

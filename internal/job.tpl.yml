@@ -31,6 +31,8 @@ spec:
         - name: output
           mountPath: {{ .OutputDir }}
       command: [sh, -c]
+      # diagnostics run in an initContainer. When the Pod becomes ready we know we can retrieve them, so we just wait here
+      # for a client copying the result
       args:
         - |
           while true; do sleep 1; done;

@@ -9,12 +9,10 @@ LDFLAGS ?= -X github.com/elastic/eck-diagnostics/internal.buildVersion=$(VERSION
 	-X github.com/elastic/eck-diagnostics/internal.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')) \
 	-X github.com/elastic/eck-diagnostics/internal.snapshotBuild=$(SNAPSHOT)
 
-BINARY := eck-diagnostics
-
-all: bin/eck-diagnostics NOTICE.txt
+all: $(GOBIN)/eck-diagnostics NOTICE.txt
 
 # build
-bin/eck-diagnostics: unit
+$(GOBIN)/eck-diagnostics: unit
 	@ GCO_ENABLED=0 go build -o $(GOBIN)/eck-diagnostics -ldflags="$(LDFLAGS)" github.com/elastic/eck-diagnostics/cmd
 
 NOTICE.txt: $(GOBIN)/go-licence-detector

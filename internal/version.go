@@ -66,15 +66,16 @@ func extractVersionFromDockerImage(image string) (*version.Version, error) {
 	return maxVersion, nil
 }
 
-func min(versions []*version.Version) *version.Version {
+func max(versions []*version.Version) *version.Version {
 	if len(versions) == 0 {
 		return maxVersion
 	}
 	res := versions[0]
 	for _, v := range versions[1:] {
-		if v.LessThan(res) {
+		if res.LessThan(v) {
 			res = v
 		}
 	}
 	return res
 }
+

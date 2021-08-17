@@ -221,7 +221,7 @@ func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error
 	return nil
 }
 
-// Logs mimics "kubectl logs -l elector" and writes the result to writers produced by out when given a filename.
+// Logs mimics "kubectl logs -l selector" and writes the result to writers produced by out when given a filename.
 func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Writer, error)) error {
 	builder := c.factory.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
