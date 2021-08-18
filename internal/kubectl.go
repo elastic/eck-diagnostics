@@ -258,6 +258,12 @@ func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Wr
 
 // requestLogs requests the logs for pod and writes the result to writers produced by out when given a filename.
 func (c Kubectl) requestLogs(pod corev1.Pod, out func(string) (io.Writer, error)) error {
+	// if Pod not in running state let's not extract logs, trying to get logs from previous container does not seem to work
+	// reliably and might lead to extra misleading noise in the diagnostic data
+	if pod.Status.Phase != corev1.PodRunning {
+		return nil
+	}
+
 	logFn := polymorphichelpers.LogsForObjectFn
 	reqs, err := logFn(c.factory, &pod, &corev1.PodLogOptions{}, 20*time.Second, true)
 	if err != nil {
