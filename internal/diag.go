@@ -264,7 +264,11 @@ func (z *ZipFile) writeErrorsToFile() error {
 	if err != nil {
 		return err
 	}
-	_, err = out.Write([]byte(aggregate.Error()))
+	errorString := aggregate.Error()
+	// log as well to inform user that something went wrong
+	logger.Printf(errorString)
+	// then include in zip archive to inform support
+	_, err = out.Write([]byte(errorString))
 	return err
 }
 
