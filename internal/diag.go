@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-
 	"log"
 	"os"
 	"path/filepath"
@@ -59,7 +58,7 @@ func (dp Params) AllNamespaces() []string {
 // Run extracts diagnostic information based on the given params.
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
-	logger.Printf("ECK diagnostics with %+v", params)
+	logger.Printf("ECK diagnostics with parameters: %+v", params)
 	kubectl, err := NewKubectl(params.Kubeconfig)
 	if err != nil {
 		return err
@@ -80,15 +79,7 @@ func Run(params Params) error {
 		return err
 	}
 
-	defer func() {
-		err := zipFile.Close()
-		if err != nil {
-			logger.Println(err.Error())
-		}
-		logger.Printf("ECK diagnostics written to %s\n", zipFileName)
-	}()
-
-	if err := zipFile.add(map[string]func(io.Writer) error{
+	zipFile.add(map[string]func(io.Writer) error{
 		"version.json": func(writer io.Writer) error {
 			return kubectl.Version(writer)
 		},
@@ -101,9 +92,7 @@ func Run(params Params) error {
 		"clusterroles.txt": func(writer io.Writer) error {
 			return kubectl.Describe("clusterroles", "elastic", "", writer)
 		},
-	}); err != nil {
-		return err
-	}
+	})
 
 	operatorVersions := make([]*version.Version, 0, len(params.OperatorNamespaces))
 
@@ -112,7 +101,7 @@ func Run(params Params) error {
 
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
 
-		if err := zipFile.add(getResources(kubectl, ns, []string{
+		zipFile.add(getResources(kubectl, ns, []string{
 			"statefulsets",
 			"pods",
 			"services",
@@ -120,20 +109,16 @@ func Run(params Params) error {
 			"events",
 			"networkpolicies",
 			"controllerrevisions",
-		})); err != nil {
-			return err
-		}
+		}))
 
-		if err := zipFile.add(map[string]func(io.Writer) error{
+		zipFile.add(map[string]func(io.Writer) error{
 			filepath.Join(ns, "secrets.json"): func(writer io.Writer) error {
 				return kubectl.GetMeta("secrets", ns, writer)
 			},
-		}); err != nil {
-			return err
-		}
+		})
 
 		if err := kubectl.Logs(ns, "", zipFile.Create); err != nil {
-			return err
+			zipFile.addError(err)
 		}
 	}
 
@@ -142,7 +127,7 @@ func Run(params Params) error {
 
 	for _, ns := range params.ResourcesNamespaces {
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		if err := zipFile.add(getResources(kubectl, ns, []string{
+		zipFile.add(getResources(kubectl, ns, []string{
 			"statefulsets",
 			"replicasets",
 			"deployments",
@@ -159,36 +144,28 @@ func Run(params Params) error {
 			"kibana",
 			"elasticsearch",
 			"apmserver",
-		})); err != nil {
-			return err
-		}
+		}))
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
-			if err := zipFile.add(getResources(kubectl, ns, []string{
+			zipFile.add(getResources(kubectl, ns, []string{
 				"enterprisesearch",
 				"beat",
-			})); err != nil {
-				return err
-			}
+			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
-			if err := zipFile.add(getResources(kubectl, ns, []string{
+			zipFile.add(getResources(kubectl, ns, []string{
 				"agent",
-			})); err != nil {
-				return err
-			}
+			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
-			if err := zipFile.add(getResources(kubectl, ns, []string{
+			zipFile.add(getResources(kubectl, ns, []string{
 				"elasticmapsserver",
-			})); err != nil {
-				return err
-			}
+			}))
 		}
 
-		if err := getLogs(kubectl, zipFile, ns,
+		getLogs(kubectl, zipFile, ns,
 			"common.k8s.elastic.co/type=elasticsearch",
 			"common.k8s.elastic.co/type=kibana",
 			"common.k8s.elastic.co/type=apm-server",
@@ -197,25 +174,27 @@ func Run(params Params) error {
 			"common.k8s.elastic.co/type=beat",              // 1.2.0
 			"common.k8s.elastic.co/type=agent",             // 1.4.0
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
-		); err != nil {
-			return err
-		}
+		)
 
-		if err := runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose); err != nil {
-			return err
-		}
+		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose)
 	}
+
+	if err := zipFile.Close(); err != nil {
+		// log the errors here and don't return them to the invoking command as we don't want usage help to be
+		// printed in this case
+		logger.Println(err.Error())
+	}
+	logger.Printf("ECK diagnostics written to %s\n", zipFileName)
 	return nil
 }
 
 // getLogs extracts logs from all Pods that match the given selectors in the namespace ns and adds them to zipFile.
-func getLogs(k *Kubectl, zipFile *ZipFile, ns string, selector ...string) error {
+func getLogs(k *Kubectl, zipFile *ZipFile, ns string, selector ...string) {
 	for _, s := range selector {
 		if err := k.Logs(ns, s, zipFile.Create); err != nil {
-			return err
+			zipFile.addError(err)
 		}
 	}
-	return nil
 }
 
 // getResources produces a map of filenames to functions that will when invoked retrieve the resources identified by rs
@@ -235,6 +214,7 @@ func getResources(k *Kubectl, ns string, rs []string) map[string]func(io.Writer)
 type ZipFile struct {
 	*zip.Writer
 	underlying io.Closer
+	errs       []error
 }
 
 // NewZipFile creates a new zip file named fileName.
@@ -251,24 +231,41 @@ func NewZipFile(fileName string) (*ZipFile, error) {
 }
 
 // Close closes the zip.Writer and the underlying file.
-func (z ZipFile) Close() error {
-	errs := []error{z.Writer.Close(), z.underlying.Close()}
+func (z *ZipFile) Close() error {
+	errs := []error{z.writeErrorsToFile(), z.Writer.Close(), z.underlying.Close()}
 	return errors.NewAggregate(errs)
 }
 
 // add takes a map of file names and functions to evaluate with the intent to add the result of the evaluation to the
 // zip file at the name used as key in the map.
-func (z ZipFile) add(fns map[string]func(io.Writer) error) error {
+func (z *ZipFile) add(fns map[string]func(io.Writer) error) {
 	for k, f := range fns {
 		fw, err := z.Create(k)
 		if err != nil {
-			return err
+			z.errs = append(z.errs, err)
+			return
 		}
-		if err := f(fw); err != nil {
-			return err
-		}
+		z.errs = append(z.errs, f(fw))
 	}
-	return nil
+}
+
+// addError records an error to be persistent in the ZipFile.
+func (z *ZipFile) addError(err error) {
+	z.errs = append(z.errs, err)
+}
+
+// writeErrorsToFile writes the accumulated errors to a file inside the ZipFile.
+func (z *ZipFile) writeErrorsToFile() error {
+	aggregate := errors.NewAggregate(z.errs)
+	if aggregate == nil {
+		return nil
+	}
+	out, err := z.Create("eck-diagnostic-errors.txt")
+	if err != nil {
+		return err
+	}
+	_, err = out.Write([]byte(aggregate.Error()))
+	return err
 }
 
 // diagnosticFilename calculates a file name to be used for the diagnostic archive based on the current time.

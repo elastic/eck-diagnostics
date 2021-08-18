@@ -38,7 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
@@ -149,8 +148,7 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 
 // extractJobResults runs an informer to be notified of Pod status changes and extract diagnostic data from any Pod
 // that has reached running state.
-func (ds *diagJobState) extractJobResults(file *ZipFile) error {
-	var errs []error
+func (ds *diagJobState) extractJobResults(file *ZipFile) {
 	ds.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if pod, ok := obj.(*corev1.Pod); ok && ds.verbose {
@@ -206,18 +204,18 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 					defer outStream.Close()
 					err := options.Run()
 					if err != nil {
-						errs = append(errs, err)
+						file.addError(err)
 						return
 					}
 				}()
 				err := ds.untarIntoZip(reader, job.esName, file)
 				if err != nil {
-					errs = append(errs, err)
+					file.addError(err)
 					return
 				}
 				err = ds.completeJob(job)
 				if err != nil {
-					errs = append(errs, err)
+					file.addError(err)
 					return
 				}
 			case corev1.PodSucceeded:
@@ -251,7 +249,6 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) error {
 		},
 	})
 	ds.informer.Run(ds.context.Done())
-	return utilerrors.NewAggregate(errs)
 }
 
 // untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
@@ -345,44 +342,51 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 
 // runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) error {
+func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
-		return err
+		zipFile.addError(err)
+		return // not recoverable let's stop here
 	}
 	clientSet, err := k.factory.KubernetesClientSet()
 	if err != nil {
-		return err
+		zipFile.addError(err)
+		return // not recoverable
 	}
 	state := newDiagJobState(clientSet, config, ns, verbose)
 
 	resources, err := k.getResources("elasticsearch", ns)
 	if err != nil {
-		return err
+		zipFile.addError(err)
+		return // not recoverable
 	}
 	if err := resources.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
-			return err
+			// record error but continue trying for other resources
+			zipFile.addError(err)
 		}
 
 		esName := info.Name
 		es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(info.Object)
 		if err != nil {
-			return err
+			zipFile.addError(err)
+			return nil
 		}
 		disabled, found, err := unstructured.NestedBool(es, "spec", "http", "tls", "selfSignedCertificate", "disabled")
 		if err != nil {
-			return err
+			zipFile.addError(err)
+			return nil
 		}
 		tls := !(found && disabled)
 
-		return state.scheduleJob(esName, tls)
+		zipFile.addError(state.scheduleJob(esName, tls))
+		return nil
 	}); err != nil {
-		return err
+		zipFile.addError(err)
 	}
 	// don't start extracting if there is nothing to do
 	if len(state.jobs) == 0 {
-		return nil
+		return
 	}
-	return state.extractJobResults(zipFile)
+	state.extractJobResults(zipFile)
 }
