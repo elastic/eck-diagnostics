@@ -123,7 +123,7 @@ func Run(params Params) error {
 	}
 
 	maxOperatorVersion := max(operatorVersions)
-	logger.Printf("ECK version is %v\n", maxOperatorVersion)
+	logVersion(maxOperatorVersion)
 
 	for _, ns := range params.ResourcesNamespaces {
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)

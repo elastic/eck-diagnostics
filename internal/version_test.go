@@ -38,7 +38,7 @@ func Test_min(t *testing.T) {
 			args: args{
 				versions: nil,
 			},
-			want: maxVersion,
+			want: fallbackMaxVersion,
 		},
 		{
 			name: "single version",
@@ -85,7 +85,7 @@ func Test_extractVersionFromDockerImage(t *testing.T) {
 			args: args{
 				image: "myimage",
 			},
-			want:    maxVersion,
+			want:    fallbackMaxVersion,
 			wantErr: false,
 		},
 		{

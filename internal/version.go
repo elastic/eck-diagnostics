@@ -27,21 +27,29 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-var maxVersion = version.MustParseSemantic("999.9999.9999") // if we cannot detect version assume a max version to turn on all features
+var fallbackMaxVersion = version.MustParseSemantic("999.9999.9999") // if we cannot detect version assume a max version to turn on all features
+
+func logVersion(v *version.Version) {
+	s := v.String()
+	if v == fallbackMaxVersion {
+		s = "unknown"
+	}
+	logger.Printf("ECK version is %s\n", s)
+}
 
 func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion string) *version.Version {
 	if userSpecifiedVersion != "" {
 		parsed, err := version.ParseSemantic(userSpecifiedVersion)
 		if err != nil {
 			logger.Println(err.Error())
-			return maxVersion
+			return fallbackMaxVersion
 		}
 		return parsed
 	}
 	statefulSet, err := c.AppsV1().StatefulSets(namespace).Get(context.Background(), "elastic-operator", metav1.GetOptions{})
 	if err != nil {
 		logger.Println(err.Error())
-		return maxVersion
+		return fallbackMaxVersion
 	}
 	for _, container := range statefulSet.Spec.Template.Spec.Containers {
 		// likely but not certain that this is the operator container
@@ -49,12 +57,12 @@ func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion s
 			parsed, err := extractVersionFromDockerImage(container.Image)
 			if err != nil {
 				logger.Printf(err.Error())
-				return maxVersion
+				return fallbackMaxVersion
 			}
 			return parsed
 		}
 	}
-	return maxVersion
+	return fallbackMaxVersion
 }
 
 func extractVersionFromDockerImage(image string) (*version.Version, error) {
@@ -63,12 +71,12 @@ func extractVersionFromDockerImage(image string) (*version.Version, error) {
 	if len(matches) == 1 && len(matches[0]) == 2 {
 		return version.ParseSemantic(matches[0][1])
 	}
-	return maxVersion, nil
+	return fallbackMaxVersion, nil
 }
 
 func max(versions []*version.Version) *version.Version {
 	if len(versions) == 0 {
-		return maxVersion
+		return fallbackMaxVersion
 	}
 	res := versions[0]
 	for _, v := range versions[1:] {
