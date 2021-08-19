@@ -1,5 +1,8 @@
 # eck-diagnostics
 Diagnostic tooling for ECK installations
+
+[![Go](https://github.com/elastic/eck-diagnostics/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/elastic/eck-diagnostics/actions/workflows/go.yml)
+
 ```
 Usage:
   eck-diagnostics [flags]
