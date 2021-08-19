@@ -27,8 +27,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-var fallbackMaxVersion = version.MustParseSemantic("999.9999.9999") // if we cannot detect version assume a max version to turn on all features
+// fallbackMaxVersion if we cannot detect version assume a max version to turn on all features
+var fallbackMaxVersion = version.MustParseSemantic("999.9999.9999")
 
+// logVersion log the given version or unknown if we only have the fallback.
 func logVersion(v *version.Version) {
 	s := v.String()
 	if v == fallbackMaxVersion {
@@ -37,6 +39,7 @@ func logVersion(v *version.Version) {
 	logger.Printf("ECK version is %s\n", s)
 }
 
+// detectECKVersion tries to detect the ECK version by inspecting the ECK operator stateful set.
 func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion string) *version.Version {
 	if userSpecifiedVersion != "" {
 		parsed, err := version.ParseSemantic(userSpecifiedVersion)
@@ -51,6 +54,15 @@ func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion s
 		logger.Println(err.Error())
 		return fallbackMaxVersion
 	}
+
+	// since version 1.3 ECK uses standard labels
+	versionLabel := statefulSet.Labels["app.kubernetes.io/version"]
+	parsed, err := version.ParseSemantic(versionLabel)
+	if err == nil {
+		return parsed
+	}
+
+	// try to parse the Docker image tag for older versions of ECK
 	for _, container := range statefulSet.Spec.Template.Spec.Containers {
 		// likely but not certain that this is the operator container
 		if strings.Contains(container.Image, "eck-operator") {
@@ -65,6 +77,7 @@ func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion s
 	return fallbackMaxVersion
 }
 
+// extractVersionFromDockerImage parses the version tag out of the given Docker image identifier.
 func extractVersionFromDockerImage(image string) (*version.Version, error) {
 	regex := regexp.MustCompile(":([^@]+)")
 	matches := regex.FindAllStringSubmatch(image, -1)
@@ -74,6 +87,7 @@ func extractVersionFromDockerImage(image string) (*version.Version, error) {
 	return fallbackMaxVersion, nil
 }
 
+// max returns the maximum of the given versions.
 func max(versions []*version.Version) *version.Version {
 	if len(versions) == 0 {
 		return fallbackMaxVersion
