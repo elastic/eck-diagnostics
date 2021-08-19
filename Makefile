@@ -3,7 +3,7 @@ export VERSION ?= 1.0.0
 export GOBIN = $(shell pwd)/bin
 
 SNAPSHOT ?= true
-TAG ?= $(shell git rev-parse --short=8 --verify HEAD)
+TAG ?= $(shell git show --format='%h' HEAD --quiet)
 LDFLAGS ?= -X github.com/elastic/eck-diagnostics/internal.buildVersion=$(VERSION) \
 	-X github.com/elastic/eck-diagnostics/internal.buildHash=$(TAG) \
 	-X github.com/elastic/eck-diagnostics/internal.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')) \

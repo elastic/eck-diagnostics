@@ -1,0 +1,56 @@
+name: release
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  push:
+    tags: [ '*.*.*' ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  goreleaser:
+    name: Release a new version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.16
+        id: go
+
+      - name: Cache Go Modules
+        uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Get the version
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF/refs\/tags\//}
+          if ${{github.event_name == 'workflow_dispatch'}}; then
+            VERSION=$(git describe --abbrev=0 --tags)
+          fi
+          echo ::set-output name=VERSION::${VERSION}
+      - name: Get the build date
+        id: get_build_date
+        run: echo ::set-output name=BUILD_DATE::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+          BUILD_DATE: ${{ steps.get_build_date.outputs.BUILD_DATE }}
+        with:
+          version: latest
+          args: release --rm-dist

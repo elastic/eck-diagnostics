@@ -9,7 +9,7 @@ builds:
       - linux
       - windows
       - darwin
-    ldflags: -X github.com/elastic/eck-diagnostics/internal.buildVersion={{.Env.VERSION}} -X github.com/elastic/eck-diagnostics/internal.buildHash={{.Env.TAG}} -X github.com/elastic/eck-diagnostics/internal.buildDate={{.Env.BUILD_DATE}} -X github.com/elastic/eck-diagnostics/internal.snapshotBuild=false
+    ldflags: -X github.com/elastic/eck-diagnostics/internal.buildVersion={{.Env.VERSION}} -X github.com/elastic/eck-diagnostics/internal.buildHash={{.ShortCommit}} -X github.com/elastic/eck-diagnostics/internal.buildDate={{.Env.BUILD_DATE}} -X github.com/elastic/eck-diagnostics/internal.snapshotBuild=false
 archives:
   - replacements:
       darwin: Darwin
