@@ -11,5 +11,10 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# ephemeral bin dir with downloaded tools and build artifacts
+bin/
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+dist/

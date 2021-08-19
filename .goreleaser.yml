@@ -1,0 +1,33 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - main: ./cmd/main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags: -X github.com/elastic/eck-diagnostics/internal.buildVersion={{.Env.VERSION}} -X github.com/elastic/eck-diagnostics/internal.buildHash={{.Env.TAG}} -X github.com/elastic/eck-diagnostics/internal.buildDate={{.Env.BUILD_DATE}} -X github.com/elastic/eck-diagnostics/internal.snapshotBuild=false
+archives:
+  - replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+    files:
+      - NOTICE.txt
+      - LICENSE
+      - README.md
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Tag }}-SNAPSHOT"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
