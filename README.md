@@ -5,7 +5,7 @@ Diagnostic tooling for ECK installations
 
 ## Installation
 
-Go to the [releases](https://github.com/elastic/eck-diagnostics/releases) page and download the version matching your architecture. Unpack the gzip'ed tar archive and put the binary inside the archive somewhere in your PATH.
+Go to the [releases](https://github.com/elastic/eck-diagnostics/releases) page and download the version matching your architecture. Unpack the gzip'ed tar archive and put the binary included in the archive somewhere in your PATH.
 
 
 ## Running
