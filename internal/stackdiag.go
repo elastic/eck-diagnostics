@@ -179,13 +179,12 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 }
 
 // extractFromRemote runs the equivalent of "kubectl cp" to extract the stack diagnostics from a remote Pod.
-func(ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *ZipFile)  {
+func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *ZipFile) {
 	job, found := ds.jobs[pod.Name]
 	if !found {
 		file.addError(fmt.Errorf("no job for Pod %s/%s", pod.Namespace, pod.Name))
 		return
 	}
-	// extract logs
 	execErrOut := io.Discard
 	if ds.verbose {
 		execErrOut = os.Stderr
