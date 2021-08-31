@@ -49,6 +49,8 @@ import (
 )
 
 const (
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:412ac7a392cf"
+
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "offer-output"
 )
@@ -71,18 +73,19 @@ type diagJob struct {
 
 // diagJobState captures the state of running a set of job to extract diagnostics from Elasticsearch.
 type diagJobState struct {
-	ns         string
-	clientSet  *kubernetes.Clientset
-	config     *rest.Config
-	informer   cache.SharedInformer
-	jobs       map[string]*diagJob
-	context    context.Context
-	cancelFunc context.CancelFunc
-	verbose    bool
+	ns              string
+	clientSet       *kubernetes.Clientset
+	config          *rest.Config
+	informer        cache.SharedInformer
+	jobs            map[string]*diagJob
+	context         context.Context
+	cancelFunc      context.CancelFunc
+	verbose         bool
+	diagnosticImage string
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool) *diagJobState {
+func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
@@ -92,14 +95,15 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 			options.LabelSelector = "app.kubernetes.io/name=eck-diagnostics"
 		}))
 	return &diagJobState{
-		jobs:       map[string]*diagJob{},
-		ns:         ns,
-		clientSet:  clientSet,
-		config:     config,
-		informer:   factory.Core().V1().Pods().Informer(),
-		cancelFunc: cancelFunc,
-		context:    ctx,
-		verbose:    verbose,
+		jobs:            map[string]*diagJob{},
+		ns:              ns,
+		clientSet:       clientSet,
+		config:          config,
+		informer:        factory.Core().V1().Pods().Informer(),
+		cancelFunc:      cancelFunc,
+		context:         ctx,
+		verbose:         verbose,
+		diagnosticImage: image,
 	}
 }
 
@@ -114,6 +118,7 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
 		"PodName":           podName,
+		"DiagnosticImage":   ds.diagnosticImage,
 		"ESNamespace":       ds.ns,
 		"ESName":            esName,
 		"TLS":               tls,
@@ -342,7 +347,7 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 
 // runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) {
+func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.addError(err)
@@ -353,7 +358,7 @@ func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbos
 		zipFile.addError(err)
 		return // not recoverable
 	}
-	state := newDiagJobState(clientSet, config, ns, verbose)
+	state := newDiagJobState(clientSet, config, ns, verbose, image)
 
 	resources, err := k.getResources("elasticsearch", ns)
 	if err != nil {

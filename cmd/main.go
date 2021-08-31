@@ -38,6 +38,7 @@ func main() {
 			return internal.Run(diagParams)
 		},
 	}
+	cmd.Flags().StringVar(&diagParams.DiagnosticImage, "diagnostic-image", internal.DiagnosticImage, "diagnostic image to be used")
 	cmd.Flags().StringArrayVarP(&diagParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Namespace(s) in which operator(s) are running")
 	cmd.Flags().StringArrayVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", []string{"default"}, "Namespace(s) in which resources are managed")
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")

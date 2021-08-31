@@ -39,6 +39,7 @@ var (
 // Params is a collection of parameters controlling the extraction of diagnostic data.
 // See the main command for explanation of individual parameters.
 type Params struct {
+	DiagnosticImage     string
 	ECKVersion          string
 	Kubeconfig          string
 	OperatorNamespaces  []string
@@ -176,7 +177,7 @@ func Run(params Params) error {
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		)
 
-		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose)
+		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
 	}
 
 	if err := zipFile.Close(); err != nil {
