@@ -39,8 +39,8 @@ func main() {
 		},
 	}
 	cmd.Flags().StringVar(&diagParams.DiagnosticImage, "diagnostic-image", internal.DiagnosticImage, "diagnostic image to be used")
-	cmd.Flags().StringArrayVarP(&diagParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Namespace(s) in which operator(s) are running")
-	cmd.Flags().StringArrayVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", []string{"default"}, "Namespace(s) in which resources are managed")
+	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
+	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", []string{"default"}, "Comma-separated list of namespace(s) in which resources are managed")
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
