@@ -225,11 +225,11 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 					return
 				}
 			case corev1.PodSucceeded:
-				file.addError(fmt.Errorf("Unexpected: Pod %s/%s succeeded\n", pod.Namespace, pod.Name))
-				ds.completeJob(job)
+				file.addError(fmt.Errorf("unexpected: Pod %s/%s succeeded", pod.Namespace, pod.Name))
+				file.addError(ds.completeJob(job))
 			case corev1.PodFailed:
-				file.addError(fmt.Errorf("Unexpected: Pod %s/%s failed\n", pod.Namespace, pod.Name))
-				ds.completeJob(job)
+				file.addError(fmt.Errorf("unexpected: Pod %s/%s failed", pod.Namespace, pod.Name))
+				file.addError(ds.completeJob(job))
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
