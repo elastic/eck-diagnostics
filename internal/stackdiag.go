@@ -19,6 +19,7 @@ package internal
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -273,17 +274,21 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file 
 			}
 			continue
 		}
-		if strings.HasSuffix(relativeFilename, "tar.gz") {
-			err := ds.repackageTarGzip(tarReader, esName, file)
-			if err != nil {
+		switch {
+		case strings.HasSuffix(relativeFilename, "tar.gz"):
+			if err := ds.repackageTarGzip(tarReader, esName, file); err != nil {
 				return err
 			}
-		} else {
+		case strings.HasSuffix(relativeFilename, ".zip"):
+			if err := ds.repackageZip(tarReader, esName, file); err != nil {
+				return err
+			}
+		default:
 			out, err := file.Create(filepath.Join(ds.ns, "elasticsearch", esName, relativeFilename))
 			if err != nil {
 				return err
 			}
-			// accept decompression bomb for CLI and we control the src
+			// accept decompression bomb for CLI as we control the src
 			if _, err := io.Copy(out, tarReader); err != nil { //nolint:gosec
 				return err
 			}
@@ -322,11 +327,11 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 			}
 			continue
 		case tar.TypeReg:
-			rel, err := filepath.Rel(topLevelDir, header.Name)
+			newPath, err := ds.asECKDiagPath(header.Name, topLevelDir, esName)
 			if err != nil {
 				return err
 			}
-			out, err := zipFile.Create(filepath.Join(ds.ns, "elasticsearch", esName, rel))
+			out, err := zipFile.Create(newPath)
 			if err != nil {
 				return err
 			}
@@ -338,6 +343,75 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 		}
 	}
 	return nil
+}
+
+func (ds *diagJobState) repackageZip(in io.Reader, esName string, zipFile *ZipFile) error {
+	// it seems the only way to repack a zip archive is to completely read it into memory first
+	b := new(bytes.Buffer)
+	if _, err := b.ReadFrom(in); err != nil {
+		return err
+	}
+
+	zipReader, err := zip.NewReader(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		return err
+	}
+	// api-diagnostics creates a common top folder we don't need when repackaging
+	topLevelDir := ""
+	for _, f := range zipReader.File {
+		// skip all the directory entries
+		if f.UncompressedSize64 == 0 {
+			continue
+		}
+		// extract the tld first time round
+		if topLevelDir == "" {
+			topLevelDir = rootDir(f.Name)
+		}
+		newPath, err := ds.asECKDiagPath(f.Name, topLevelDir, esName)
+		if err != nil {
+			return err
+		}
+		out, err := zipFile.Create(newPath)
+		if err != nil {
+			return err
+		}
+		if err := copyFromZip(f, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFromZip(f *zip.File, out io.Writer) error {
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	if _, err := io.Copy(out, rc); err != nil { //nolint:gosec
+		return err
+	}
+	return nil
+}
+
+func rootDir(name string) string {
+	if len(name) == 0 {
+		return name
+	}
+	i := 1
+	for i < len(name) && name[i] != os.PathSeparator {
+		i++
+	}
+	return name[0:i]
+}
+
+func (ds *diagJobState) asECKDiagPath(original, topLevelDir, esName string) (string, error) {
+	rel, err := filepath.Rel(topLevelDir, original)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(ds.ns, "elasticsearch", esName, rel), nil
 }
 
 // runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
