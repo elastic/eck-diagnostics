@@ -10,7 +10,7 @@ spec:
   initContainers:
     - name: diagnostics
       # image built as described in https://github.com/elastic/support-diagnostics#creating-a-docker-image
-      image: docker.elastic.co/eck-dev/support-diagnostics:8.1.4
+      image: {{ .DiagnosticImage }}
       imagePullPolicy: IfNotPresent
       env:
         - name: ES_PW
@@ -26,7 +26,7 @@ spec:
           mountPath: {{ .OutputDir }}
   containers:
     - name: {{ .MainContainerName }}
-      image: docker.elastic.co/eck-dev/support-diagnostics:412ac7a392cf
+      image: {{ .DiagnosticImage }}
       volumeMounts:
         - name: output
           mountPath: {{ .OutputDir }}
