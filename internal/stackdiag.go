@@ -406,8 +406,8 @@ func rootDir(name string) string {
 	return name[0:i]
 }
 
-func (ds *diagJobState) asECKDiagPath(original, tld, esName string) (string, error) {
-	rel, err := filepath.Rel(tld, original)
+func (ds *diagJobState) asECKDiagPath(original, topLevelDir, esName string) (string, error) {
+	rel, err := filepath.Rel(topLevelDir, original)
 	if err != nil {
 		return "", err
 	}

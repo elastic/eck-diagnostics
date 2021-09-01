@@ -251,10 +251,11 @@ func (z *ZipFile) add(fns map[string]func(io.Writer) error) {
 
 // addError records an error to be persistent in the ZipFile.
 func (z *ZipFile) addError(err error) {
-	if err != nil {
-		// log errors immediately to give user early feedback
-		logger.Printf(err.Error())
+	if err == nil {
+		return
 	}
+	// log errors immediately to give user early feedback
+	logger.Printf(err.Error())
 	z.errs = append(z.errs, err)
 }
 
