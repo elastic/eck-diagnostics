@@ -459,9 +459,9 @@ func rootDir(name string) string {
 	return name[0:i]
 }
 
-// toOutputPath removes the path prefix tld from original and rebases it in outputDirPrefix.
-func toOutputPath(original, tld, outputDirPrefix string) (string, error) {
-	rel, err := filepath.Rel(tld, original)
+// toOutputPath removes the path prefix topLevelDir from original and re-bases it in outputDirPrefix.
+func toOutputPath(original, topLevelDir, outputDirPrefix string) (string, error) {
+	rel, err := filepath.Rel(topLevelDir, original)
 	if err != nil {
 		return "", err
 	}
