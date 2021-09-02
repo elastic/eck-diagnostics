@@ -26,6 +26,7 @@ var (
 // Params is a collection of parameters controlling the extraction of diagnostic data.
 // See the main command for explanation of individual parameters.
 type Params struct {
+	DiagnosticImage     string
 	ECKVersion          string
 	Kubeconfig          string
 	OperatorNamespaces  []string
@@ -163,7 +164,7 @@ func Run(params Params) error {
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		)
 
-		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose)
+		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
 	}
 
 	if err := zipFile.Close(); err != nil {
@@ -238,6 +239,11 @@ func (z *ZipFile) add(fns map[string]func(io.Writer) error) {
 
 // addError records an error to be persistent in the ZipFile.
 func (z *ZipFile) addError(err error) {
+	if err == nil {
+		return
+	}
+	// log errors immediately to give user early feedback
+	logger.Printf(err.Error())
 	z.errs = append(z.errs, err)
 }
 
@@ -252,9 +258,7 @@ func (z *ZipFile) writeErrorsToFile() error {
 		return err
 	}
 	errorString := aggregate.Error()
-	// log as well to inform user that something went wrong
-	logger.Printf(errorString)
-	// then include in zip archive to inform support
+	// errors have been logged already just include in zip archive to inform support
 	_, err = out.Write([]byte(errorString))
 	return err
 }

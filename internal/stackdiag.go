@@ -6,6 +6,7 @@ package internal
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -36,6 +37,8 @@ import (
 )
 
 const (
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.1.4"
+
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "offer-output"
 )
@@ -58,18 +61,19 @@ type diagJob struct {
 
 // diagJobState captures the state of running a set of job to extract diagnostics from Elasticsearch.
 type diagJobState struct {
-	ns         string
-	clientSet  *kubernetes.Clientset
-	config     *rest.Config
-	informer   cache.SharedInformer
-	jobs       map[string]*diagJob
-	context    context.Context
-	cancelFunc context.CancelFunc
-	verbose    bool
+	ns              string
+	clientSet       *kubernetes.Clientset
+	config          *rest.Config
+	informer        cache.SharedInformer
+	jobs            map[string]*diagJob
+	context         context.Context
+	cancelFunc      context.CancelFunc
+	verbose         bool
+	diagnosticImage string
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool) *diagJobState {
+func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
@@ -79,14 +83,15 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 			options.LabelSelector = "app.kubernetes.io/name=eck-diagnostics"
 		}))
 	return &diagJobState{
-		jobs:       map[string]*diagJob{},
-		ns:         ns,
-		clientSet:  clientSet,
-		config:     config,
-		informer:   factory.Core().V1().Pods().Informer(),
-		cancelFunc: cancelFunc,
-		context:    ctx,
-		verbose:    verbose,
+		jobs:            map[string]*diagJob{},
+		ns:              ns,
+		clientSet:       clientSet,
+		config:          config,
+		informer:        factory.Core().V1().Pods().Informer(),
+		cancelFunc:      cancelFunc,
+		context:         ctx,
+		verbose:         verbose,
+		diagnosticImage: image,
 	}
 }
 
@@ -101,6 +106,7 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
 		"PodName":           podName,
+		"DiagnosticImage":   ds.diagnosticImage,
 		"ESNamespace":       ds.ns,
 		"ESName":            esName,
 		"TLS":               tls,
@@ -260,17 +266,21 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file 
 			}
 			continue
 		}
-		if strings.HasSuffix(relativeFilename, "tar.gz") {
-			err := ds.repackageTarGzip(tarReader, esName, file)
-			if err != nil {
+		switch {
+		case strings.HasSuffix(relativeFilename, "tar.gz"):
+			if err := ds.repackageTarGzip(tarReader, esName, file); err != nil {
 				return err
 			}
-		} else {
+		case strings.HasSuffix(relativeFilename, ".zip"):
+			if err := ds.repackageZip(tarReader, esName, file); err != nil {
+				return err
+			}
+		default:
 			out, err := file.Create(filepath.Join(ds.ns, "elasticsearch", esName, relativeFilename))
 			if err != nil {
 				return err
 			}
-			// accept decompression bomb for CLI and we control the src
+			// accept decompression bomb for CLI as we control the src
 			if _, err := io.Copy(out, tarReader); err != nil { //nolint:gosec
 				return err
 			}
@@ -309,11 +319,11 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 			}
 			continue
 		case tar.TypeReg:
-			rel, err := filepath.Rel(topLevelDir, header.Name)
+			newPath, err := ds.asECKDiagPath(header.Name, topLevelDir, esName)
 			if err != nil {
 				return err
 			}
-			out, err := zipFile.Create(filepath.Join(ds.ns, "elasticsearch", esName, rel))
+			out, err := zipFile.Create(newPath)
 			if err != nil {
 				return err
 			}
@@ -327,9 +337,78 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 	return nil
 }
 
+func (ds *diagJobState) repackageZip(in io.Reader, esName string, zipFile *ZipFile) error {
+	// it seems the only way to repack a zip archive is to completely read it into memory first
+	b := new(bytes.Buffer)
+	if _, err := b.ReadFrom(in); err != nil {
+		return err
+	}
+
+	zipReader, err := zip.NewReader(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		return err
+	}
+	// api-diagnostics creates a common top folder we don't need when repackaging
+	topLevelDir := ""
+	for _, f := range zipReader.File {
+		// skip all the directory entries
+		if f.UncompressedSize64 == 0 {
+			continue
+		}
+		// extract the tld first time round
+		if topLevelDir == "" {
+			topLevelDir = rootDir(f.Name)
+		}
+		newPath, err := ds.asECKDiagPath(f.Name, topLevelDir, esName)
+		if err != nil {
+			return err
+		}
+		out, err := zipFile.Create(newPath)
+		if err != nil {
+			return err
+		}
+		if err := copyFromZip(f, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFromZip(f *zip.File, out io.Writer) error {
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	if _, err := io.Copy(out, rc); err != nil { //nolint:gosec
+		return err
+	}
+	return nil
+}
+
+func rootDir(name string) string {
+	if len(name) == 0 {
+		return name
+	}
+	i := 1
+	for i < len(name) && name[i] != os.PathSeparator {
+		i++
+	}
+	return name[0:i]
+}
+
+func (ds *diagJobState) asECKDiagPath(original, topLevelDir, esName string) (string, error) {
+	rel, err := filepath.Rel(topLevelDir, original)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(ds.ns, "elasticsearch", esName, rel), nil
+}
+
 // runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) {
+func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.addError(err)
@@ -340,7 +419,7 @@ func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbos
 		zipFile.addError(err)
 		return // not recoverable
 	}
-	state := newDiagJobState(clientSet, config, ns, verbose)
+	state := newDiagJobState(clientSet, config, ns, verbose, image)
 
 	resources, err := k.getResources("elasticsearch", ns)
 	if err != nil {

@@ -16,7 +16,7 @@ By default the tool will run diagnostics for the `elastic-system` namespace, whe
 
 To run diagnostics, for example, for namespaces `a` and `b` instead:
 ```shell
-eck-diagnostics -r a -r b
+eck-diagnostics -r a,b
 ```
 
 A full list of available options is reproduced here and is also printed when calling the `eck-diagnostics` binary with the `--help` or `-h` flag:
@@ -26,12 +26,13 @@ Usage:
   eck-diagnostics [flags]
 
 Flags:
+      --diagnostic-image string            diagnostic image to be used (default "docker.elastic.co/eck-dev/support-diagnostics:8.1.4")
       --eck-version string                 ECK version in use, will try to autodetect if not specified
   -h, --help                               help for eck-diagnostics
       --kubeconfig string                  optional path to kube config, defaults to $HOME/.kube/config
-  -o, --operator-namespaces stringArray    Namespace(s) in which operator(s) are running (default [elastic-system])
+  -o, --operator-namespaces strings        Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
       --output-directory string            Path where to output diagnostic results
-  -r, --resources-namespaces stringArray   Namespace(s) in which resources are managed (default [default])
+  -r, --resources-namespaces strings       Comma-separated list of namespace(s) in which resources are managed (default [default])
       --verbose                            Verbose mode
 
 ```
