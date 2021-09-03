@@ -1,19 +1,6 @@
-// Licensed to Elasticsearch B.V. under one or more contributor
-// license agreements. See the NOTICE file distributed with
-// this work for additional information regarding copyright
-// ownership. Elasticsearch B.V. licenses this file to you under
-// the Apache License, Version 2.0 (the "License"); you may
-// not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+// or more contributor license agreements. Licensed under the Elastic License 2.0;
+// you may not use this file except in compliance with the Elastic License 2.0.
 
 package internal
 
@@ -51,6 +38,8 @@ import (
 )
 
 const (
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.1.4"
+
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "offer-output"
 )
@@ -91,18 +80,19 @@ func (j diagJob) outputDirPrefix() string {
 
 // diagJobState captures the state of running a set of job to extract diagnostics from Elastic Stack applications.
 type diagJobState struct {
-	ns         string
-	clientSet  *kubernetes.Clientset
-	config     *rest.Config
-	informer   cache.SharedInformer
-	jobs       map[string]*diagJob
-	context    context.Context
-	cancelFunc context.CancelFunc
-	verbose    bool
+	ns              string
+	clientSet       *kubernetes.Clientset
+	config          *rest.Config
+	informer        cache.SharedInformer
+	jobs            map[string]*diagJob
+	context         context.Context
+	cancelFunc      context.CancelFunc
+	verbose         bool
+	diagnosticImage string
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool) *diagJobState {
+func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
@@ -112,14 +102,15 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 			options.LabelSelector = "app.kubernetes.io/name=eck-diagnostics"
 		}))
 	return &diagJobState{
-		jobs:       map[string]*diagJob{},
-		ns:         ns,
-		clientSet:  clientSet,
-		config:     config,
-		informer:   factory.Core().V1().Pods().Informer(),
-		cancelFunc: cancelFunc,
-		context:    ctx,
-		verbose:    verbose,
+		jobs:            map[string]*diagJob{},
+		ns:              ns,
+		clientSet:       clientSet,
+		config:          config,
+		informer:        factory.Core().V1().Pods().Informer(),
+		cancelFunc:      cancelFunc,
+		context:         ctx,
+		verbose:         verbose,
+		diagnosticImage: image,
 	}
 }
 
@@ -142,6 +133,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
 		"PodName":           podName,
+		"DiagnosticImage":   ds.diagnosticImage,
 		"Namespace":         ds.ns,
 		"ESName":            esName,
 		"SVCName":           fmt.Sprintf("%s-%s-http", resourceName, shortType),
@@ -470,7 +462,7 @@ func toOutputPath(original, topLevelDir, outputDirPrefix string) (string, error)
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runStackDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) {
+func runStackDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.addError(err)
@@ -481,7 +473,7 @@ func runStackDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool) 
 		zipFile.addError(err)
 		return // not recoverable
 	}
-	state := newDiagJobState(clientSet, config, ns, verbose)
+	state := newDiagJobState(clientSet, config, ns, verbose, image)
 
 	if err := scheduleJobs(k, ns, zipFile.addError, state, "elasticsearch"); err != nil {
 		zipFile.addError(err)

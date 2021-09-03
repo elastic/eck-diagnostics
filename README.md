@@ -26,6 +26,7 @@ Usage:
   eck-diagnostics [flags]
 
 Flags:
+      --diagnostic-image string            diagnostic image to be used (default "docker.elastic.co/eck-dev/support-diagnostics:8.1.4")
       --eck-version string                 ECK version in use, will try to autodetect if not specified
   -h, --help                               help for eck-diagnostics
       --kubeconfig string                  optional path to kube config, defaults to $HOME/.kube/config
