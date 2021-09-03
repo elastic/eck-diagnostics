@@ -20,20 +20,19 @@ import (
 	"text/template"
 	"time"
 
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/kubectl/pkg/cmd/exec"
-
 	"github.com/ghodss/yaml"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/kubectl/pkg/cmd/exec"
 	"k8s.io/utils/pointer"
 )
 
@@ -522,9 +521,11 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 				recordErr(err)
 				return nil
 			}
-			if found {
-				esName = val
+			if !found || val == "" {
+				logger.Printf("Skipping %s/%s as it it not using elasticsearchRef", ns, resourceName)
+				return nil
 			}
+			esName = val
 		}
 
 		recordErr(state.scheduleJob(typ, esName, resourceName, tls))
