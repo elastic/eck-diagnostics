@@ -8,7 +8,7 @@ require (
 	k8s.io/api v0.21.3
 	k8s.io/apimachinery v0.21.3
 	k8s.io/cli-runtime v0.21.3
-	k8s.io/client-go v0.21.3
+	k8s.io/client-go/v12 v12.0.0
 	k8s.io/kubectl v0.21.3
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 )
