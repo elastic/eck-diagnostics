@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
@@ -242,6 +243,12 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 		},
 	})
 	ds.informer.Run(ds.context.Done())
+	err := ds.context.Err()
+	// we cancel the context when we are done but want to log any other errors e.g. deadline exceeded
+	if err != nil && !errors.Is(err, context.Canceled) {
+		file.addError(fmt.Errorf("extracting Elastic stack diagnostic for namespace %s: %w", ds.ns, err))
+		file.addError(ds.abortAllJobs())
+	}
 }
 
 // untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
@@ -289,11 +296,29 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file 
 	return nil
 }
 
-// completeJob marks the given job as done and deletes the corresponding Pod.
+// abortAllJobs terminates all open jobs.
+func (ds *diagJobState) abortAllJobs() error {
+	var errs []error
+	for _, j := range ds.jobs {
+		if !j.done {
+			logger.Printf("Aborting diagnostic extraction for cluster %s/%s", ds.ns, j.esName)
+			// use a new context for this cleanup as the main context might have been cancelled already
+			errs = append(errs, ds.terminateJob(context.Background(), j))
+		}
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// completeJob to be called after successful completion, terminates the job.
 func (ds *diagJobState) completeJob(job *diagJob) error {
 	logger.Printf("Elasticsearch diagnostics extracted for cluster %s/%s\n", ds.ns, job.esName)
+	return ds.terminateJob(ds.context, job)
+}
+
+// terminateJob marks job as done and deletes diagnostic Pod.
+func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	job.done = true
-	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ds.context, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 }
 
 // repackageTarGzip repackages the *.tar.gz archives produced by the Elasticsearch diagnostic tool into the given ZipFile.
