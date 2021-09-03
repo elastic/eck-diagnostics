@@ -116,7 +116,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
 func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) error {
-	podName := fmt.Sprintf("%s-diag", resourceName)
+	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
 	tpl, err := template.New("job").Parse(jobTemplate)
 	if err != nil {
 		return err
