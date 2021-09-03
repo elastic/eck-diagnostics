@@ -42,7 +42,7 @@ func logVersion(v *version.Version) {
 	logger.Printf("ECK version is %s\n", s)
 }
 
-// detectECKVersion tries to detect the ECK version by inspecting the ECK operator stateful set.
+// detectECKVersion tries to detect the ECK version by inspecting the ECK operator stateful set or deployment.
 func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion string) *version.Version {
 	if userSpecifiedVersion != "" {
 		parsed, err := version.ParseSemantic(userSpecifiedVersion)
