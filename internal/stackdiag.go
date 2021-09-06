@@ -166,7 +166,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 
 			switch pod.Status.Phase {
 			case corev1.PodPending:
-				// ignore
+				ds.detectImageErrors(pod, file)
 			case corev1.PodUnknown:
 				logger.Printf("Unexpected diagnostic Pod %s/%s in unknown phase", pod.Namespace, pod.Name)
 			case corev1.PodRunning:
@@ -289,11 +289,30 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file 
 	return nil
 }
 
-// completeJob marks the given job as done and deletes the corresponding Pod.
+// completeJob to be called after successful completion, terminates the job.
 func (ds *diagJobState) completeJob(job *diagJob) error {
 	logger.Printf("Elasticsearch diagnostics extracted for cluster %s/%s\n", ds.ns, job.esName)
+	return ds.terminateJob(job)
+}
+
+// terminateJob marks the given job as done and deltes the corresponding Pod.
+func (ds *diagJobState) terminateJob(job *diagJob) error {
 	job.done = true
 	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ds.context, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+}
+
+// detectImageErrors tries to detect Image pull errors on the diagnostic container and terminates the job if it finds any
+// as there is little chance of the image being made available during the execution time of the tool.
+func (ds *diagJobState) detectImageErrors(pod *corev1.Pod, file *ZipFile) {
+	for _, status := range pod.Status.InitContainerStatuses {
+		if status.State.Waiting != nil && strings.Contains(status.State.Waiting.Reason, "Image") {
+			if job, exists := ds.jobs[pod.Name]; exists {
+				file.addError(fmt.Errorf("failed running stack diagnostics: %s:%s", status.State.Waiting.Reason, status.State.Waiting.Message))
+				file.addError(ds.terminateJob(job))
+				return
+			}
+		}
+	}
 }
 
 // repackageTarGzip repackages the *.tar.gz archives produced by the Elasticsearch diagnostic tool into the given ZipFile.
