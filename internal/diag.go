@@ -164,7 +164,7 @@ func Run(params Params) error {
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		)
 
-		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
+		runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
 	}
 
 	if err := zipFile.Close(); err != nil {
