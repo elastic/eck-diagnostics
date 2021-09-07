@@ -34,7 +34,7 @@ func RootDir(name string) string {
 	return name[0:i]
 }
 
-// ZipFile wraps a zip.Writer to Add a few convenience functions and implement resource closing.
+// ZipFile wraps a zip.Writer to add a few convenience functions and implement resource closing.
 type ZipFile struct {
 	*zip.Writer
 	underlying io.Closer
@@ -62,7 +62,7 @@ func (z *ZipFile) Close() error {
 	return errors.NewAggregate(errs)
 }
 
-// Add takes a map of file names and functions to evaluate with the intent to Add the result of the evaluation to the
+// Add takes a map of file names and functions to evaluate with the intent to add the result of the evaluation to the
 // zip file at the name used as key in the map.
 func (z *ZipFile) Add(fns map[string]func(io.Writer) error) {
 	for k, f := range fns {
