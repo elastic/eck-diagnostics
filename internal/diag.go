@@ -53,7 +53,7 @@ func Run(params Params) error {
 	signal.Notify(sigCh, os.Interrupt)
 	go func() {
 		s := <-sigCh
-		logger.Printf("Aborting %v received", s)
+		logger.Printf("Aborting: %v received", s)
 		close(stop)
 	}()
 
