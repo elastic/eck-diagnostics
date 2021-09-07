@@ -48,19 +48,37 @@ var (
 	//go:embed job.tpl.yml
 	jobTemplate string
 	// jobTimeout governs how long at most diagnostic data extraction may take.
-	jobTimeout = 10 * time.Minute
+	jobTimeout = 5 * time.Minute
 	// jobPollingInterval is used to configure the informer used to be notified of Pod status changes.
 	jobPollingInterval = 10 * time.Second
 )
 
 // diagJob represents a pod whose job it is to extract diagnostic data from an Elasticsearch cluster.
 type diagJob struct {
-	podName string
-	esName  string
-	done    bool
+	podName      string
+	namespace    string // de-normalized for convenience
+	typ          string
+	resourceName string
+	done         bool
 }
 
-// diagJobState captures the state of running a set of job to extract diagnostics from Elasticsearch.
+// sourceDirPrefix the directory prefix the stack support-diagnostics tool uses in the archive it creates.
+func (j diagJob) sourceDirPrefix() string {
+	prefix := "api-diagnostics"
+	if j.typ == "kibana" {
+		prefix = fmt.Sprintf("%s-%s", j.typ, prefix)
+	}
+	return prefix
+}
+
+// outputDirPrefix the directory hierarchy we want to use in the archive created by this tool. It should be the namespace
+// of the resource we are creating diagnostics for followed by the type (elasticserach or kibana currently) and the name
+// of the resource.
+func (j diagJob) outputDirPrefix() string {
+	return filepath.Join(j.namespace, j.typ, j.resourceName)
+}
+
+// diagJobState captures the state of running a set of job to extract diagnostics from Elastic Stack applications.
 type diagJobState struct {
 	ns              string
 	clientSet       *kubernetes.Clientset
@@ -101,20 +119,30 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 	return state
 }
 
-// scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster esName.
-func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
-	podName := fmt.Sprintf("%s-diag", esName)
+// scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
+func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) error {
+	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
 	tpl, err := template.New("job").Parse(jobTemplate)
 	if err != nil {
 		return err
+	}
+
+	diagnosticType := "api"
+	shortType := "es"
+
+	if typ == "kibana" {
+		shortType = "kb"
+		diagnosticType = "kibana-api"
 	}
 
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
 		"PodName":           podName,
 		"DiagnosticImage":   ds.diagnosticImage,
-		"ESNamespace":       ds.ns,
+		"Namespace":         ds.ns,
 		"ESName":            esName,
+		"SVCName":           fmt.Sprintf("%s-%s-http", resourceName, shortType),
+		"Type":              diagnosticType,
 		"TLS":               tls,
 		"OutputDir":         podOutputDir,
 		"MainContainerName": podMainContainerName,
@@ -139,10 +167,65 @@ func (ds *diagJobState) scheduleJob(esName string, tls bool) error {
 		return err
 	}
 	ds.jobs[podName] = &diagJob{
-		podName: podName,
-		esName:  esName,
+		podName:      podName,
+		namespace:    ds.ns,
+		resourceName: resourceName,
+		typ:          typ,
 	}
 	return nil
+}
+
+// extractFromRemote runs the equivalent of "kubectl cp" to extract the stack diagnostics from a remote Pod.
+func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *ZipFile) {
+	job, found := ds.jobs[pod.Name]
+	if !found {
+		file.addError(fmt.Errorf("no job for Pod %s/%s", pod.Namespace, pod.Name))
+		return
+	}
+	execErrOut := io.Discard
+	if ds.verbose {
+		execErrOut = os.Stderr
+	}
+	reader, outStream := io.Pipe()
+	options := &exec.ExecOptions{
+		StreamOptions: exec.StreamOptions{
+			IOStreams: genericclioptions.IOStreams{
+				In:     nil,
+				Out:    outStream,
+				ErrOut: execErrOut,
+			},
+
+			Namespace:     pod.Namespace,
+			PodName:       pod.Name,
+			ContainerName: podMainContainerName,
+		},
+		Config:    ds.config,
+		PodClient: ds.clientSet.CoreV1(),
+		Command:   []string{"tar", "cf", "-", podOutputDir},
+		Executor:  &exec.DefaultRemoteExecutor{},
+	}
+	go func() {
+		defer func() {
+			// TODO: this routine never terminates in my experiments and this code never runs
+			// we are effectively leaking go routines for every diagnostic we run
+			outStream.Close()
+		}()
+		err := options.Run()
+		if err != nil {
+			file.addError(err)
+			return
+		}
+	}()
+	err := ds.untarIntoZip(reader, job, file)
+	if err != nil {
+		file.addError(err)
+		return
+	}
+	err = ds.completeJob(job)
+	if err != nil {
+		file.addError(err)
+		return
+	}
 }
 
 // extractJobResults runs an informer to be notified of Pod status changes and extract diagnostic data from any Pod
@@ -176,47 +259,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 			case corev1.PodUnknown:
 				logger.Printf("Unexpected diagnostic Pod %s/%s in unknown phase", pod.Namespace, pod.Name)
 			case corev1.PodRunning:
-				// extract logs
-				execErrOut := io.Discard
-				if ds.verbose {
-					execErrOut = os.Stderr
-				}
-				reader, outStream := io.Pipe()
-				options := &exec.ExecOptions{
-					StreamOptions: exec.StreamOptions{
-						IOStreams: genericclioptions.IOStreams{
-							In:     nil,
-							Out:    outStream,
-							ErrOut: execErrOut,
-						},
-
-						Namespace:     pod.Namespace,
-						PodName:       pod.Name,
-						ContainerName: podMainContainerName,
-					},
-					Config:    ds.config,
-					PodClient: ds.clientSet.CoreV1(),
-					Command:   []string{"tar", "cf", "-", podOutputDir},
-					Executor:  &exec.DefaultRemoteExecutor{},
-				}
-				go func() {
-					defer outStream.Close()
-					err := options.Run()
-					if err != nil {
-						file.addError(err)
-						return
-					}
-				}()
-				err := ds.untarIntoZip(reader, job.esName, file)
-				if err != nil {
-					file.addError(err)
-					return
-				}
-				err = ds.completeJob(job)
-				if err != nil {
-					file.addError(err)
-					return
-				}
+				ds.extractFromRemote(pod, file)
 			case corev1.PodSucceeded:
 				file.addError(fmt.Errorf("unexpected: Pod %s/%s succeeded", pod.Namespace, pod.Name))
 				file.addError(ds.completeJob(job))
@@ -247,6 +290,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 			}
 		},
 	})
+
 	ds.informer.Run(ds.context.Done())
 	err := ds.context.Err()
 
@@ -258,7 +302,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 }
 
 // untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
-func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file *ZipFile) error {
+func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, job *diagJob, file *ZipFile) error {
 	tarReader := tar.NewReader(reader)
 	for {
 		header, err := tarReader.Next()
@@ -273,23 +317,23 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, esName string, file 
 		relOutputDir := fmt.Sprintf("%s/", strings.TrimPrefix(podOutputDir, "/"))
 		relativeFilename := strings.TrimPrefix(remoteFilename, relOutputDir)
 		// stack diagnostics create output in a directory called api-diagnostics-{{.Timestamp}}
-		if !strings.HasPrefix(relativeFilename, "api-diagnostics") {
+		if !strings.HasPrefix(relativeFilename, job.sourceDirPrefix()) {
 			if ds.verbose {
-				logger.Printf("Ignoring file %s in tar from %s diagnostics\n", header.Name, esName)
+				logger.Printf("Ignoring file %s in tar from %s diagnostics\n", header.Name, job.resourceName)
 			}
 			continue
 		}
 		switch {
 		case strings.HasSuffix(relativeFilename, "tar.gz"):
-			if err := ds.repackageTarGzip(tarReader, esName, file); err != nil {
+			if err := ds.repackageTarGzip(tarReader, job.outputDirPrefix(), file); err != nil {
 				return err
 			}
 		case strings.HasSuffix(relativeFilename, ".zip"):
-			if err := ds.repackageZip(tarReader, esName, file); err != nil {
+			if err := ds.repackageZip(tarReader, job.outputDirPrefix(), file); err != nil {
 				return err
 			}
 		default:
-			out, err := file.Create(filepath.Join(ds.ns, "elasticsearch", esName, relativeFilename))
+			out, err := file.Create(filepath.Join(ds.ns, job.typ, job.resourceName, relativeFilename))
 			if err != nil {
 				return err
 			}
@@ -307,7 +351,7 @@ func (ds *diagJobState) abortAllJobs() error {
 	var errs []error
 	for _, j := range ds.jobs {
 		if !j.done {
-			logger.Printf("Aborting diagnostic extraction for cluster %s/%s", ds.ns, j.esName)
+			logger.Printf("Aborting diagnostic extraction for cluster %s/%s", ds.ns, j.resourceName)
 			// use a new context for this cleanup as the main context might have been cancelled already
 			errs = append(errs, ds.terminateJob(context.Background(), j))
 		}
@@ -317,7 +361,7 @@ func (ds *diagJobState) abortAllJobs() error {
 
 // completeJob to be called after successful completion, terminates the job.
 func (ds *diagJobState) completeJob(job *diagJob) error {
-	logger.Printf("Elasticsearch diagnostics extracted for cluster %s/%s\n", ds.ns, job.esName)
+	logger.Printf("%s diagnostics extracted for %s/%s\n", strings.Title(job.typ), ds.ns, job.resourceName)
 	return ds.terminateJob(ds.context, job)
 }
 
@@ -327,8 +371,8 @@ func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 }
 
-// repackageTarGzip repackages the *.tar.gz archives produced by the Elasticsearch diagnostic tool into the given ZipFile.
-func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *ZipFile) error {
+// repackageTarGzip repackages the *.tar.gz archives produced by the support diagnostics tool into the given ZipFile.
+func (ds *diagJobState) repackageTarGzip(in io.Reader, outputDirPrefix string, zipFile *ZipFile) error {
 	gzReader, err := gzip.NewReader(in)
 	if err != nil {
 		return err
@@ -350,7 +394,7 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 			}
 			continue
 		case tar.TypeReg:
-			newPath, err := ds.asECKDiagPath(header.Name, topLevelDir, esName)
+			newPath, err := toOutputPath(header.Name, topLevelDir, outputDirPrefix)
 			if err != nil {
 				return err
 			}
@@ -368,7 +412,8 @@ func (ds *diagJobState) repackageTarGzip(in io.Reader, esName string, zipFile *Z
 	return nil
 }
 
-func (ds *diagJobState) repackageZip(in io.Reader, esName string, zipFile *ZipFile) error {
+// repackageZip repackages the *.zip file produced by the support diagnostics tool into the zip file produced by this tool
+func (ds *diagJobState) repackageZip(in io.Reader, outputDirPrefix string, zipFile *ZipFile) error {
 	// it seems the only way to repack a zip archive is to completely read it into memory first
 	b := new(bytes.Buffer)
 	if _, err := b.ReadFrom(in); err != nil {
@@ -390,7 +435,7 @@ func (ds *diagJobState) repackageZip(in io.Reader, esName string, zipFile *ZipFi
 		if topLevelDir == "" {
 			topLevelDir = rootDir(f.Name)
 		}
-		newPath, err := ds.asECKDiagPath(f.Name, topLevelDir, esName)
+		newPath, err := toOutputPath(f.Name, topLevelDir, outputDirPrefix)
 		if err != nil {
 			return err
 		}
@@ -405,6 +450,7 @@ func (ds *diagJobState) repackageZip(in io.Reader, esName string, zipFile *ZipFi
 	return nil
 }
 
+// copyFromZip writes the contents of file f from a zip file into out.
 func copyFromZip(f *zip.File, out io.Writer) error {
 	rc, err := f.Open()
 	if err != nil {
@@ -418,6 +464,7 @@ func copyFromZip(f *zip.File, out io.Writer) error {
 	return nil
 }
 
+// rootDir returns the top level directory in a path
 func rootDir(name string) string {
 	if len(name) == 0 {
 		return name
@@ -429,17 +476,18 @@ func rootDir(name string) string {
 	return name[0:i]
 }
 
-func (ds *diagJobState) asECKDiagPath(original, topLevelDir, esName string) (string, error) {
+// toOutputPath removes the path prefix topLevelDir from original and re-bases it in outputDirPrefix.
+func toOutputPath(original, topLevelDir, outputDirPrefix string) (string, error) {
 	rel, err := filepath.Rel(topLevelDir, original)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(ds.ns, "elasticsearch", esName, rel), nil
+	return filepath.Join(outputDirPrefix, rel), nil
 }
 
-// runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
+// runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string, stop chan struct{}) {
+func runStackDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string, stop chan struct{}) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.addError(err)
@@ -452,38 +500,61 @@ func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbos
 	}
 	state := newDiagJobState(clientSet, config, ns, verbose, image, stop)
 
-	resources, err := k.getResources("elasticsearch", ns)
-	if err != nil {
+	if err := scheduleJobs(k, ns, zipFile.addError, state, "elasticsearch"); err != nil {
 		zipFile.addError(err)
-		return // not recoverable
+		return
 	}
-	if err := resources.Visit(func(info *resource.Info, err error) error {
-		if err != nil {
-			// record error but continue trying for other resources
-			zipFile.addError(err)
-		}
-
-		esName := info.Name
-		es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(info.Object)
-		if err != nil {
-			zipFile.addError(err)
-			return nil
-		}
-		disabled, found, err := unstructured.NestedBool(es, "spec", "http", "tls", "selfSignedCertificate", "disabled")
-		if err != nil {
-			zipFile.addError(err)
-			return nil
-		}
-		tls := !(found && disabled)
-
-		zipFile.addError(state.scheduleJob(esName, tls))
-		return nil
-	}); err != nil {
+	if err := scheduleJobs(k, ns, zipFile.addError, state, "kibana"); err != nil {
 		zipFile.addError(err)
+		return
 	}
 	// don't start extracting if there is nothing to do
 	if len(state.jobs) == 0 {
 		return
 	}
 	state.extractJobResults(zipFile)
+}
+
+// scheduleJobs lists all resources of type typ and schedules a diagnostic job for each of them
+func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string) error {
+	resources, err := k.getResources(typ, ns)
+	if err != nil {
+		return err // not recoverable
+	}
+	return resources.Visit(func(info *resource.Info, err error) error {
+		if err != nil {
+			// record error but continue trying for other resources
+			recordErr(err)
+		}
+
+		resourceName := info.Name
+		es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(info.Object)
+		if err != nil {
+			recordErr(err)
+			return nil
+		}
+		disabled, found, err := unstructured.NestedBool(es, "spec", "http", "tls", "selfSignedCertificate", "disabled")
+		if err != nil {
+			recordErr(err)
+			return nil
+		}
+		tls := !(found && disabled)
+
+		esName := resourceName
+		if typ != "elasticsearch" {
+			val, found, err := unstructured.NestedString(es, "spec", "elasticsearchRef", "name")
+			if err != nil {
+				recordErr(err)
+				return nil
+			}
+			if !found || val == "" {
+				logger.Printf("Skipping %s/%s as it it not using elasticsearchRef", ns, resourceName)
+				return nil
+			}
+			esName = val
+		}
+
+		recordErr(state.scheduleJob(typ, esName, resourceName, tls))
+		return nil
+	})
 }

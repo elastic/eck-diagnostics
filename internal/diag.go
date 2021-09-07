@@ -189,7 +189,7 @@ LOOP:
 				"common.k8s.elastic.co/type=maps",              // 1.6.0
 			)
 
-			runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stop)
+			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stop)
 		}
 	}
 
