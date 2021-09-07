@@ -53,7 +53,7 @@ func Run(params Params) error {
 	signal.Notify(sigCh, os.Interrupt)
 	go func() {
 		s := <-sigCh
-		logger.Printf("%v received", s)
+		logger.Printf("Aborting %v received", s)
 		close(stop)
 	}()
 
@@ -123,74 +123,64 @@ func Run(params Params) error {
 	maxOperatorVersion := max(operatorVersions)
 	logVersion(maxOperatorVersion)
 
-	namespaces := make(chan string, 100)
-
-	for _, ns := range params.ResourcesNamespaces {
-		namespaces <- ns
-	}
-	close(namespaces)
-
 LOOP:
-	for {
+	for _, ns := range params.ResourcesNamespaces {
 		select {
 		case <-stop:
 			break LOOP
-		case ns, ok := <-namespaces:
-			if !ok {
-				break LOOP
-			}
-			logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-			zipFile.add(getResources(kubectl, ns, []string{
-				"statefulsets",
-				"replicasets",
-				"deployments",
-				"daemonsets",
-				"pods",
-				"persistentvolumes",
-				"persistentvolumeclaims",
-				"services",
-				"endpoints",
-				"configmaps",
-				"events",
-				"networkpolicies",
-				"controllerrevisions",
-				"kibana",
-				"elasticsearch",
-				"apmserver",
-			}))
-
-			if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
-				zipFile.add(getResources(kubectl, ns, []string{
-					"enterprisesearch",
-					"beat",
-				}))
-			}
-
-			if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
-				zipFile.add(getResources(kubectl, ns, []string{
-					"agent",
-				}))
-			}
-
-			if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
-				zipFile.add(getResources(kubectl, ns, []string{
-					"elasticmapsserver",
-				}))
-			}
-
-			getLogs(kubectl, zipFile, ns,
-				"common.k8s.elastic.co/type=elasticsearch",
-				"common.k8s.elastic.co/type=kibana",
-				"common.k8s.elastic.co/type=apm-server",
-				// the below where introduced in later version but label selector will just return no result:
-				"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
-				"common.k8s.elastic.co/type=beat",              // 1.2.0
-				"common.k8s.elastic.co/type=agent",             // 1.4.0
-				"common.k8s.elastic.co/type=maps",              // 1.6.0
-			)
-
-			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stop)
+		default:
 		}
+		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
+		zipFile.add(getResources(kubectl, ns, []string{
+			"statefulsets",
+			"replicasets",
+			"deployments",
+			"daemonsets",
+			"pods",
+			"persistentvolumes",
+			"persistentvolumeclaims",
+			"services",
+			"endpoints",
+			"configmaps",
+			"events",
+			"networkpolicies",
+			"controllerrevisions",
+			"kibana",
+			"elasticsearch",
+			"apmserver",
+		}))
+
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
+			zipFile.add(getResources(kubectl, ns, []string{
+				"enterprisesearch",
+				"beat",
+			}))
+		}
+
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
+			zipFile.add(getResources(kubectl, ns, []string{
+				"agent",
+			}))
+		}
+
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
+			zipFile.add(getResources(kubectl, ns, []string{
+				"elasticmapsserver",
+			}))
+		}
+
+		getLogs(kubectl, zipFile, ns,
+			"common.k8s.elastic.co/type=elasticsearch",
+			"common.k8s.elastic.co/type=kibana",
+			"common.k8s.elastic.co/type=apm-server",
+			// the below where introduced in later version but label selector will just return no result:
+			"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
+			"common.k8s.elastic.co/type=beat",              // 1.2.0
+			"common.k8s.elastic.co/type=agent",             // 1.4.0
+			"common.k8s.elastic.co/type=maps",              // 1.6.0
+		)
+
+		runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stop)
 	}
 
 	if err := zipFile.Close(); err != nil {

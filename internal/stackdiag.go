@@ -114,7 +114,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 	}
 	go func() {
 		<-stop
-		_ = state.abortAllJobs()
+		cancelFunc()
 	}()
 	return state
 }
@@ -297,8 +297,10 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 	// we cancel the context when we are done but want to log any other errors e.g. deadline exceeded
 	if err != nil && !errors.Is(err, context.Canceled) {
 		file.addError(fmt.Errorf("extracting Elastic stack diagnostic for namespace %s: %w", ds.ns, err))
-		file.addError(ds.abortAllJobs())
 	}
+	// make sure any open jobs are aborted at this point, under normal circumstances this should be a NOOP
+	// when interrupted jobs might still be running and should be stopped now.
+	file.addError(ds.abortAllJobs())
 }
 
 // untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
