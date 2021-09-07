@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/elastic/eck-diagnostics/internal/archive"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -256,7 +256,7 @@ func (c Kubectl) requestLogs(pod corev1.Pod, out func(string) (io.Writer, error)
 	if err != nil {
 		return err
 	}
-	writer, err := out(filepath.Join(pod.Namespace, "pod", pod.Name, "logs.txt"))
+	writer, err := out(archive.Path(pod.Namespace, "pod", pod.Name, "logs.txt"))
 	if err != nil {
 		return err
 	}
