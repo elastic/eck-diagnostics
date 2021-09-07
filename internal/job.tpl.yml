@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: {{ .PodName }}
-  namespace: {{ .ESNamespace }}
+  namespace: {{ .Namespace }}
   labels:
     app.kubernetes.io/name: eck-diagnostics
 spec:
@@ -20,7 +20,7 @@ spec:
               key: elastic
       command: [sh, -c]
       args:
-        - ./diagnostics.sh -h {{.ESName}}-es-http --type api --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o {{ .OutputDir }}
+        - ./diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o {{ .OutputDir }}
       volumeMounts:
         - name: output
           mountPath: {{ .OutputDir }}
