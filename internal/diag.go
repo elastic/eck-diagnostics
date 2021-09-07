@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"time"
 
@@ -47,6 +48,15 @@ func (dp Params) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
 	logger.Printf("ECK diagnostics with parameters: %+v", params)
+	stop := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		s := <-sigCh
+		logger.Printf("%v received", s)
+		close(stop)
+	}()
+
 	kubectl, err := NewKubectl(params.Kubeconfig)
 	if err != nil {
 		return err
@@ -113,58 +123,74 @@ func Run(params Params) error {
 	maxOperatorVersion := max(operatorVersions)
 	logVersion(maxOperatorVersion)
 
+	namespaces := make(chan string, 100)
+
 	for _, ns := range params.ResourcesNamespaces {
-		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		zipFile.add(getResources(kubectl, ns, []string{
-			"statefulsets",
-			"replicasets",
-			"deployments",
-			"daemonsets",
-			"pods",
-			"persistentvolumes",
-			"persistentvolumeclaims",
-			"services",
-			"endpoints",
-			"configmaps",
-			"events",
-			"networkpolicies",
-			"controllerrevisions",
-			"kibana",
-			"elasticsearch",
-			"apmserver",
-		}))
+		namespaces <- ns
+	}
+	close(namespaces)
 
-		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
+LOOP:
+	for {
+		select {
+		case <-stop:
+			break LOOP
+		case ns, ok := <-namespaces:
+			if !ok {
+				break LOOP
+			}
+			logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
 			zipFile.add(getResources(kubectl, ns, []string{
-				"enterprisesearch",
-				"beat",
+				"statefulsets",
+				"replicasets",
+				"deployments",
+				"daemonsets",
+				"pods",
+				"persistentvolumes",
+				"persistentvolumeclaims",
+				"services",
+				"endpoints",
+				"configmaps",
+				"events",
+				"networkpolicies",
+				"controllerrevisions",
+				"kibana",
+				"elasticsearch",
+				"apmserver",
 			}))
+
+			if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
+				zipFile.add(getResources(kubectl, ns, []string{
+					"enterprisesearch",
+					"beat",
+				}))
+			}
+
+			if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
+				zipFile.add(getResources(kubectl, ns, []string{
+					"agent",
+				}))
+			}
+
+			if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
+				zipFile.add(getResources(kubectl, ns, []string{
+					"elasticmapsserver",
+				}))
+			}
+
+			getLogs(kubectl, zipFile, ns,
+				"common.k8s.elastic.co/type=elasticsearch",
+				"common.k8s.elastic.co/type=kibana",
+				"common.k8s.elastic.co/type=apm-server",
+				// the below where introduced in later version but label selector will just return no result:
+				"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
+				"common.k8s.elastic.co/type=beat",              // 1.2.0
+				"common.k8s.elastic.co/type=agent",             // 1.4.0
+				"common.k8s.elastic.co/type=maps",              // 1.6.0
+			)
+
+			runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stop)
 		}
-
-		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
-			zipFile.add(getResources(kubectl, ns, []string{
-				"agent",
-			}))
-		}
-
-		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
-			zipFile.add(getResources(kubectl, ns, []string{
-				"elasticmapsserver",
-			}))
-		}
-
-		getLogs(kubectl, zipFile, ns,
-			"common.k8s.elastic.co/type=elasticsearch",
-			"common.k8s.elastic.co/type=kibana",
-			"common.k8s.elastic.co/type=apm-server",
-			// the below where introduced in later version but label selector will just return no result:
-			"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
-			"common.k8s.elastic.co/type=beat",              // 1.2.0
-			"common.k8s.elastic.co/type=agent",             // 1.4.0
-			"common.k8s.elastic.co/type=maps",              // 1.6.0
-		)
-
-		runElasticsearchDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
 	}
 
 	if err := zipFile.Close(); err != nil {

@@ -74,7 +74,7 @@ type diagJobState struct {
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string) *diagJobState {
+func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string, stop chan struct{}) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
@@ -83,7 +83,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 			options.LabelSelector = "app.kubernetes.io/name=eck-diagnostics"
 		}))
-	return &diagJobState{
+	state := &diagJobState{
 		jobs:            map[string]*diagJob{},
 		ns:              ns,
 		clientSet:       clientSet,
@@ -94,6 +94,11 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 		verbose:         verbose,
 		diagnosticImage: image,
 	}
+	go func() {
+		<-stop
+		_ = state.abortAllJobs()
+	}()
+	return state
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster esName.
@@ -244,6 +249,7 @@ func (ds *diagJobState) extractJobResults(file *ZipFile) {
 	})
 	ds.informer.Run(ds.context.Done())
 	err := ds.context.Err()
+
 	// we cancel the context when we are done but want to log any other errors e.g. deadline exceeded
 	if err != nil && !errors.Is(err, context.Canceled) {
 		file.addError(fmt.Errorf("extracting Elastic stack diagnostic for namespace %s: %w", ds.ns, err))
@@ -433,7 +439,7 @@ func (ds *diagJobState) asECKDiagPath(original, topLevelDir, esName string) (str
 
 // runElasticsearchDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string) {
+func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbose bool, image string, stop chan struct{}) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.addError(err)
@@ -444,7 +450,7 @@ func runElasticsearchDiagnostics(k *Kubectl, ns string, zipFile *ZipFile, verbos
 		zipFile.addError(err)
 		return // not recoverable
 	}
-	state := newDiagJobState(clientSet, config, ns, verbose, image)
+	state := newDiagJobState(clientSet, config, ns, verbose, image, stop)
 
 	resources, err := k.getResources("elasticsearch", ns)
 	if err != nil {
