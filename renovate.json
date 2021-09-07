@@ -1,5 +1,17 @@
 {
   "extends": [
     "config:base"
+  ],
+  "packageRules": [
+    {
+      "packageNames": [
+        "k8s.io/api",
+        "k8s.io/apimachinery",
+        "k8s.io/cli-runtime",
+        "k8s.io/client-go",
+        "k8s.io/kubectl"
+      ],
+      "groupName": "k8s"
+    }
   ]
 }
