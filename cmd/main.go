@@ -38,11 +38,14 @@ func main() {
 	}
 
 	if err := cmd.Execute(); err != nil {
-		exitWithError(err)
+		// cobra logs the error already no need to redo that
+		exitWithError(nil)
 	}
 }
 
 func exitWithError(err error) {
-	log.Printf("Error: %v", err)
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
 	os.Exit(1)
 }
