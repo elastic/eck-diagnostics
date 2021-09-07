@@ -351,7 +351,7 @@ func (ds *diagJobState) abortAllJobs() error {
 	var errs []error
 	for _, j := range ds.jobs {
 		if !j.done {
-			logger.Printf("Aborting diagnostic extraction for cluster %s/%s", ds.ns, j.resourceName)
+			logger.Printf("Aborting diagnostic extraction for %s %s/%s", j.typ, ds.ns, j.resourceName)
 			// use a new context for this cleanup as the main context might have been cancelled already
 			errs = append(errs, ds.terminateJob(context.Background(), j))
 		}
