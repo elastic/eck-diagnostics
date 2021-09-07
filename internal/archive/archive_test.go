@@ -2,7 +2,7 @@
 // or more contributor license agreements. Licensed under the Elastic License 2.0;
 // you may not use this file except in compliance with the Elastic License 2.0.
 
-package internal
+package archive
 
 import "testing"
 
@@ -39,8 +39,8 @@ func Test_rootDir(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := rootDir(tt.args.name); got != tt.want {
-				t.Errorf("rootDir() = %v, want %v", got, tt.want)
+			if got := RootDir(tt.args.name); got != tt.want {
+				t.Errorf("RootDir() = %v, want %v", got, tt.want)
 			}
 		})
 	}

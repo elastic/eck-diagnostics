@@ -27,13 +27,25 @@ func main() {
 	}
 	cmd.Flags().StringVar(&diagParams.DiagnosticImage, "diagnostic-image", internal.DiagnosticImage, "diagnostic image to be used")
 	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
-	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", []string{"default"}, "Comma-separated list of namespace(s) in which resources are managed")
+	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
-	if err := cmd.Execute(); err != nil {
-		log.Printf("Error: %v", err)
-		os.Exit(1)
+
+	if err := cmd.MarkFlagRequired("resources-namespaces"); err != nil {
+		exitWithError(err)
 	}
+
+	if err := cmd.Execute(); err != nil {
+		// cobra logs the error already no need to redo that
+		exitWithError(nil)
+	}
+}
+
+func exitWithError(err error) {
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
+	os.Exit(1)
 }
