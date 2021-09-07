@@ -61,7 +61,7 @@ func Run(params Params) error {
 	}
 
 	zipFileName := diagnosticFilename(params.OutputDir)
-	zipFile, err := archive.NewZipFile(zipFileName, logger)
+	zipFile, err := archive.NewZipFile(zipFileName, about().Version, logger)
 	if err != nil {
 		return err
 	}
