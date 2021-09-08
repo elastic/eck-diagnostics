@@ -21,7 +21,7 @@ import (
 
 var (
 	logBuffer bytes.Buffer
-	logger  = log.New(io.MultiWriter(os.Stdout, &logBuffer), "", log.LstdFlags)
+	logger    = log.New(io.MultiWriter(os.Stdout, &logBuffer), "", log.LstdFlags)
 )
 
 // Params is a collection of parameters controlling the extraction of diagnostic data.
@@ -182,7 +182,7 @@ func Run(params Params) error {
 // addDiagnosticLogToArchive adds the passed bytes.Buffer reference as eck-diagnostics.log to the given archive.
 // The underlying assumption being that the number of log lines produced by this tool is small enough to allow to be
 // kept in memory.
-func addDiagnosticLogToArchive(zipFile *archive.ZipFile, logContents *	bytes.Buffer)  {
+func addDiagnosticLogToArchive(zipFile *archive.ZipFile, logContents *bytes.Buffer) {
 	writer, err := zipFile.Create("eck-diagnostics.log")
 	if err != nil {
 		zipFile.AddError(err)
