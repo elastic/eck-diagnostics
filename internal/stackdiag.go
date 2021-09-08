@@ -255,7 +255,10 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 
 			switch pod.Status.Phase {
 			case corev1.PodPending:
-				// ignore
+				if err := ds.detectImageErrors(pod); err != nil {
+					file.AddError(err)
+					file.AddError(ds.terminateJob(ds.context, job))
+				}
 			case corev1.PodUnknown:
 				logger.Printf("Unexpected diagnostic Pod %s/%s in unknown phase", pod.Namespace, pod.Name)
 			case corev1.PodRunning:
@@ -378,6 +381,17 @@ func (ds *diagJobState) completeJob(job *diagJob) error {
 func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	job.done = true
 	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+}
+
+// detectImageErrors tries to detect Image pull errors on the diagnostic container. Callers should then terminate the job
+// as there is little chance of the image being made available during the execution time of the tool.
+func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
+	for _, status := range pod.Status.InitContainerStatuses {
+		if status.State.Waiting != nil && strings.Contains(status.State.Waiting.Reason, "Image") {
+			return fmt.Errorf("failed running stack diagnostics: %s:%s", status.State.Waiting.Reason, status.State.Waiting.Message)
+		}
+	}
+	return nil
 }
 
 // repackageTarGzip repackages the *.tar.gz archives produced by the support diagnostics tool into the given ZipFile.
