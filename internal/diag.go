@@ -180,8 +180,8 @@ func Run(params Params) error {
 }
 
 // addDiagnosticLogToArchive adds the passed bytes.Buffer reference as eck-diagnostics.log to the given archive.
-// The underlying assumption being that the number of log lines produced by this tool is small enough to allow to be
-// kept in memory.
+// The underlying assumption being that the number of log lines produced by this tool is small enough to allow them to
+// be kept in memory.
 func addDiagnosticLogToArchive(zipFile *archive.ZipFile, logContents *bytes.Buffer) {
 	writer, err := zipFile.Create("eck-diagnostics.log")
 	if err != nil {
