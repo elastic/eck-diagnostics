@@ -325,17 +325,23 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, job *diagJob, file *
 			}
 			continue
 		}
+		manifest := archive.StackDiagnosticManifest{DiagType: job.typ}
+
 		switch {
 		case strings.HasSuffix(relativeFilename, "tar.gz"):
+			manifest.DiagPath = job.outputDirPrefix()
 			if err := ds.repackageTarGzip(tarReader, job.outputDirPrefix(), file); err != nil {
 				return err
 			}
 		case strings.HasSuffix(relativeFilename, ".zip"):
+			manifest.DiagPath = job.outputDirPrefix()
 			if err := ds.repackageZip(tarReader, job.outputDirPrefix(), file); err != nil {
 				return err
 			}
 		default:
-			out, err := file.Create(archive.Path(ds.ns, job.typ, job.resourceName, relativeFilename))
+			path := archive.Path(ds.ns, job.typ, job.resourceName, relativeFilename)
+			manifest.DiagPath = path
+			out, err := file.Create(path)
 			if err != nil {
 				return err
 			}
@@ -344,6 +350,7 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, job *diagJob, file *
 				return err
 			}
 		}
+		file.AddManifestEntry(manifest)
 	}
 	return nil
 }

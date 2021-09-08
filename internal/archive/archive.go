@@ -6,6 +6,7 @@ package archive
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"io"
 	"log"
 	"os"
@@ -38,12 +39,13 @@ func RootDir(name string) string {
 type ZipFile struct {
 	*zip.Writer
 	underlying io.Closer
+	manifest   DiagnosticManifest
 	errs       []error
 	log        *log.Logger
 }
 
 // NewZipFile creates a new zip file named fileName.
-func NewZipFile(fileName string, log *log.Logger) (*ZipFile, error) {
+func NewZipFile(fileName string, version string, log *log.Logger) (*ZipFile, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, err
@@ -52,13 +54,19 @@ func NewZipFile(fileName string, log *log.Logger) (*ZipFile, error) {
 	return &ZipFile{
 		Writer:     w,
 		underlying: f,
+		manifest:   NewDiagnosticManifest(version),
 		log:        log,
 	}, nil
 }
 
 // Close closes the zip.Writer and the underlying file.
 func (z *ZipFile) Close() error {
-	errs := []error{z.writeErrorsToFile(), z.Writer.Close(), z.underlying.Close()}
+	errs := []error{
+		z.writeManifest(),
+		z.writeErrorsToFile(),
+		z.Writer.Close(),
+		z.underlying.Close(),
+	}
 	return errors.NewAggregate(errs)
 }
 
@@ -83,6 +91,23 @@ func (z *ZipFile) AddError(err error) {
 	// log errors immediately to give user early feedback
 	log.Print(err.Error())
 	z.errs = append(z.errs, err)
+}
+
+func (z *ZipFile) AddManifestEntry(manifest StackDiagnosticManifest) {
+	z.manifest.IncludedDiagnostics = append(z.manifest.IncludedDiagnostics, manifest)
+}
+
+func (z *ZipFile) writeManifest() error {
+	bytes, err := json.Marshal(z.manifest)
+	if err != nil {
+		return err
+	}
+	writer, err := z.Create("manifest.json")
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(bytes)
+	return err
 }
 
 // writeErrorsToFile writes the accumulated errors to a file inside the ZipFile.
