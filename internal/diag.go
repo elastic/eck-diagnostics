@@ -5,6 +5,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -19,7 +20,8 @@ import (
 )
 
 var (
-	logger = log.New(os.Stdout, "", log.LstdFlags)
+	logBuffer bytes.Buffer
+	logger  = log.New(io.MultiWriter(os.Stdout, &logBuffer), "", log.LstdFlags)
 )
 
 // Params is a collection of parameters controlling the extraction of diagnostic data.
@@ -166,6 +168,8 @@ func Run(params Params) error {
 		runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
 	}
 
+	addDiagnosticLogToArchive(zipFile, &logBuffer)
+
 	if err := zipFile.Close(); err != nil {
 		// log the errors here and don't return them to the invoking command as we don't want usage help to be
 		// printed in this case
@@ -173,6 +177,19 @@ func Run(params Params) error {
 	}
 	logger.Printf("ECK diagnostics written to %s\n", zipFileName)
 	return nil
+}
+
+// addDiagnosticLogToArchive adds the passed bytes.Buffer reference as eck-diagnostics.log to the given archive.
+// The underlying assumption being that the number of log lines produced by this tool is small enough to allow to be
+// kept in memory.
+func addDiagnosticLogToArchive(zipFile *archive.ZipFile, logContents *	bytes.Buffer)  {
+	writer, err := zipFile.Create("eck-diagnostics.log")
+	if err != nil {
+		zipFile.AddError(err)
+		return
+	}
+	_, err = writer.Write(logContents.Bytes())
+	zipFile.AddError(err)
 }
 
 // getLogs extracts logs from all Pods that match the given selectors in the namespace ns and adds them to zipFile.
