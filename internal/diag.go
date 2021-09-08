@@ -32,6 +32,7 @@ type Params struct {
 	OperatorNamespaces  []string
 	ResourcesNamespaces []string
 	OutputDir           string
+	RunStackDiagnostics bool
 	Verbose             bool
 }
 
@@ -179,7 +180,9 @@ LOOP:
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		)
 
-		runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stopCh)
+		if params.RunStackDiagnostics {
+			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stopCh)
+		}
 	}
 
 	if err := zipFile.Close(); err != nil {

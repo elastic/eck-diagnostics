@@ -26,13 +26,13 @@ Usage:
   eck-diagnostics [flags]
 
 Flags:
-      --diagnostic-image string            diagnostic image to be used (default "docker.elastic.co/eck-dev/support-diagnostics:8.1.4")
-      --eck-version string                 ECK version in use, will try to autodetect if not specified
-  -h, --help                               help for eck-diagnostics
-      --kubeconfig string                  optional path to kube config, defaults to $HOME/.kube/config
-  -o, --operator-namespaces strings        Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
-      --output-directory string            Path where to output diagnostic results
-  -r, --resources-namespaces strings       Comma-separated list of namespace(s) in which resources are managed (default [default])
-      --verbose                            Verbose mode
-
+      --diagnostic-image string        Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:8.1.4")
+      --eck-version string             ECK version in use, will try to autodetect if not specified
+  -h, --help                           help for eck-diagnostics
+      --kubeconfig string              optional path to kube config, defaults to $HOME/.kube/config
+  -o, --operator-namespaces strings    Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
+      --output-directory string        Path where to output diagnostic results
+  -r, --resources-namespaces strings   Comma-separated list of namespace(s) in which resources are managed
+      --run-stack-diagnostics          Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
+      --verbose                        Verbose mode
 ```
