@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"time"
 
@@ -47,6 +48,15 @@ func (dp Params) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
 	logger.Printf("ECK diagnostics with parameters: %+v", params)
+	stopCh := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		s := <-sigCh
+		logger.Printf("Aborting: %v received", s)
+		close(stopCh)
+	}()
+
 	kubectl, err := NewKubectl(params.Kubeconfig)
 	if err != nil {
 		return err
@@ -113,7 +123,13 @@ func Run(params Params) error {
 	maxOperatorVersion := max(operatorVersions)
 	logVersion(maxOperatorVersion)
 
+LOOP:
 	for _, ns := range params.ResourcesNamespaces {
+		select {
+		case <-stopCh:
+			break LOOP
+		default:
+		}
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
 		zipFile.Add(getResources(kubectl, ns, []string{
 			"statefulsets",
@@ -165,7 +181,7 @@ func Run(params Params) error {
 		)
 
 		if params.RunStackDiagnostics {
-			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage)
+			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stopCh)
 		}
 	}
 
