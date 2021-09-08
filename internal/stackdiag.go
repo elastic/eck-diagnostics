@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
@@ -91,7 +92,7 @@ type diagJobState struct {
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string) *diagJobState {
+func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string, stopCh chan struct{}) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
@@ -100,7 +101,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 			options.LabelSelector = "app.kubernetes.io/name=eck-diagnostics"
 		}))
-	return &diagJobState{
+	state := &diagJobState{
 		jobs:            map[string]*diagJob{},
 		ns:              ns,
 		clientSet:       clientSet,
@@ -111,6 +112,11 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 		verbose:         verbose,
 		diagnosticImage: image,
 	}
+	go func() {
+		<-stopCh
+		cancelFunc()
+	}()
+	return state
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
@@ -287,10 +293,14 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 
 	ds.informer.Run(ds.context.Done())
 	err := ds.context.Err()
+
 	// we cancel the context when we are done but want to log any other errors e.g. deadline exceeded
 	if err != nil && !errors.Is(err, context.Canceled) {
-		logger.Printf("Elastic stack diagnostic extraction for namespace %s: %s", ds.ns, err.Error())
+		file.AddError(fmt.Errorf("extracting Elastic stack diagnostic for namespace %s: %w", ds.ns, err))
 	}
+	// make sure any open jobs are aborted at this point, under normal circumstances this should be a NOOP
+	// when interrupted jobs might still be running and should be stopped now.
+	file.AddError(ds.abortAllJobs())
 }
 
 // untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
@@ -338,16 +348,29 @@ func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, job *diagJob, file *
 	return nil
 }
 
+// abortAllJobs terminates all open jobs.
+func (ds *diagJobState) abortAllJobs() error {
+	var errs []error
+	for _, j := range ds.jobs {
+		if !j.done {
+			logger.Printf("Aborting diagnostic extraction for %s %s/%s", j.typ, ds.ns, j.resourceName)
+			// use a new context for this cleanup as the main context might have been cancelled already
+			errs = append(errs, ds.terminateJob(context.Background(), j))
+		}
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
 // completeJob to be called after successful completion, terminates the job.
 func (ds *diagJobState) completeJob(job *diagJob) error {
 	logger.Printf("%s diagnostics extracted for %s/%s\n", strings.Title(job.typ), ds.ns, job.resourceName)
-	return ds.terminateJob(job)
+	return ds.terminateJob(ds.context, job)
 }
 
-// terminateJob marks the given job as done and deltes the corresponding Pod.
-func (ds *diagJobState) terminateJob(job *diagJob) error {
+// terminateJob marks job as done and deletes diagnostic Pod.
+func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	job.done = true
-	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ds.context, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 }
 
 // detectImageErrors tries to detect Image pull errors on the diagnostic container and terminates the job if it finds any
@@ -357,7 +380,7 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod, file *archive.ZipFile
 		if status.State.Waiting != nil && strings.Contains(status.State.Waiting.Reason, "Image") {
 			if job, exists := ds.jobs[pod.Name]; exists {
 				file.AddError(fmt.Errorf("failed running stack diagnostics: %s:%s", status.State.Waiting.Reason, status.State.Waiting.Message))
-				file.AddError(ds.terminateJob(job))
+				file.AddError(ds.terminateJob(ds.context, job))
 				return
 			}
 		}
@@ -459,7 +482,7 @@ func toOutputPath(original, topLevelDir, outputDirPrefix string) string {
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string) {
+func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, stopCh chan struct{}) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.AddError(err)
@@ -470,7 +493,7 @@ func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		zipFile.AddError(err)
 		return // not recoverable
 	}
-	state := newDiagJobState(clientSet, config, ns, verbose, image)
+	state := newDiagJobState(clientSet, config, ns, verbose, image, stopCh)
 
 	if err := scheduleJobs(k, ns, zipFile.AddError, state, "elasticsearch"); err != nil {
 		zipFile.AddError(err)
