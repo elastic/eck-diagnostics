@@ -47,13 +47,13 @@ func (dp Params) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
 	logger.Printf("ECK diagnostics with parameters: %+v", params)
-	stop := make(chan struct{})
+	stopCh := make(chan struct{})
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)
 	go func() {
 		s := <-sigCh
 		logger.Printf("Aborting: %v received", s)
-		close(stop)
+		close(stopCh)
 	}()
 
 	kubectl, err := NewKubectl(params.Kubeconfig)
@@ -125,7 +125,7 @@ func Run(params Params) error {
 LOOP:
 	for _, ns := range params.ResourcesNamespaces {
 		select {
-		case <-stop:
+		case <-stopCh:
 			break LOOP
 		default:
 		}
@@ -179,7 +179,7 @@ LOOP:
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		)
 
-		runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stop)
+		runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stopCh)
 	}
 
 	if err := zipFile.Close(); err != nil {

@@ -92,7 +92,7 @@ type diagJobState struct {
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string, stop chan struct{}) *diagJobState {
+func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string, stopCh chan struct{}) *diagJobState {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
@@ -113,7 +113,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 		diagnosticImage: image,
 	}
 	go func() {
-		<-stop
+		<-stopCh
 		cancelFunc()
 	}()
 	return state
@@ -468,7 +468,7 @@ func toOutputPath(original, topLevelDir, outputDirPrefix string) string {
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, stop chan struct{}) {
+func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, stopCh chan struct{}) {
 	config, err := k.factory.ToRESTConfig()
 	if err != nil {
 		zipFile.AddError(err)
@@ -479,7 +479,7 @@ func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		zipFile.AddError(err)
 		return // not recoverable
 	}
-	state := newDiagJobState(clientSet, config, ns, verbose, image, stop)
+	state := newDiagJobState(clientSet, config, ns, verbose, image, stopCh)
 
 	if err := scheduleJobs(k, ns, zipFile.AddError, state, "elasticsearch"); err != nil {
 		zipFile.AddError(err)
