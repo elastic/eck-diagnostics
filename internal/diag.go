@@ -171,6 +171,12 @@ LOOP:
 			}))
 		}
 
+		zipFile.Add(map[string]func(io.Writer) error{
+			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
+				return kubectl.GetMeta("secrets", ns, writer)
+			},
+		})
+
 		getLogs(kubectl, zipFile, ns,
 			"common.k8s.elastic.co/type=elasticsearch",
 			"common.k8s.elastic.co/type=kibana",
