@@ -36,3 +36,43 @@ Flags:
       --run-stack-diagnostics          Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
       --verbose                        Verbose mode
 ```
+
+## Information collected by eck-diagnostics
+
+eck-diagnostics retrieves Kubernetes API server resources and log files and runs, unless disabled, Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` option.
+
+The following Kubernetes resources are retrieved from the cluster being diagnosed:
+
+### Global resources
+* Kubernetes server version
+* Kubernetes nodes
+* PodSecurityPolicy
+* ClusterRole
+
+### In all operator and workload resource namespaces 
+* StatefulSet
+* Pod
+* Service
+* ConfigMap
+* Event
+* NetworkPolicy
+* ControllerRevision
+* Secret (metadata only)
+
+### In the workload resources namespaces
+In addition to the resources mentioned above:
+* ReplicaSet
+* Deployment
+* DaemonSet
+* PersistentVolume
+* PersistentVolumeClaim
+* Endpoint
+* Kibana
+* Elasticsearch
+* ApmServer
+* EnterpriseSearch
+* Agent
+* ElasticMapsServer
+
+### Logs
+All logs are collected in the operator namespaces (`-o, --operator-namespaces`), in the workload resource namespaces only those logs are collected that originate in Pods managed by ECK.
