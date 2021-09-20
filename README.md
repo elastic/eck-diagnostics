@@ -60,19 +60,21 @@ The following Kubernetes resources are retrieved from the cluster being diagnose
 * Secret (metadata only)
 
 ### In the workload resources namespaces
-In addition to the resources mentioned above:
+In addition to the resources mentioned above, the following Kubernetes resources are retrieved:
 * ReplicaSet
 * Deployment
 * DaemonSet
 * PersistentVolume
 * PersistentVolumeClaim
 * Endpoint
-* Kibana
-* Elasticsearch
-* ApmServer
-* EnterpriseSearch
+
+In addition the ECK related custom resources are included in those namespaces as well: 
 * Agent
+* ApmServer
 * ElasticMapsServer
+* Elasticsearch
+* EnterpriseSearch
+* Kibana
 
 ### Logs
 All logs are collected in the operator namespaces (`-o, --operator-namespaces`), in the workload resource namespaces only those logs are collected that originate in Pods managed by ECK.
