@@ -39,7 +39,7 @@ Flags:
 
 ## Information collected by eck-diagnostics
 
-eck-diagnostics retrieves Kubernetes API server resources and log files and runs, unless disabled, Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` option.
+The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` option.
 
 The following Kubernetes resources are retrieved from the cluster being diagnosed:
 
@@ -68,7 +68,7 @@ In addition to the resources mentioned above, the following Kubernetes resources
 * PersistentVolumeClaim
 * Endpoint
 
-In addition the ECK related custom resources are included in those namespaces as well: 
+The ECK related custom resources are included in those namespaces as well: 
 * Agent
 * ApmServer
 * ElasticMapsServer
@@ -77,4 +77,4 @@ In addition the ECK related custom resources are included in those namespaces as
 * Kibana
 
 ### Logs
-All logs are collected in the operator namespaces (`-o, --operator-namespaces`), in the workload resource namespaces only those logs are collected that originate in Pods managed by ECK.
+In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only those logs that originate in Pods managed by ECK are collected .
