@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
@@ -39,15 +38,21 @@ func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion s
 		}
 		return parsed
 	}
-	statefulSet, err := c.AppsV1().StatefulSets(namespace).Get(context.Background(), "elastic-operator", metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return extractVersionFromDeployment(c, namespace)
-	}
+	// we use the control-plane label since ECK version 1.0
+	ssets, err := c.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "control-plane=elastic-operator"})
 	if err != nil {
 		logger.Println(err.Error())
 		return fallbackMaxVersion
 	}
+	if len(ssets.Items) == 0 {
+		return extractVersionFromDeployment(c, namespace)
+	}
 
+	if len(ssets.Items) > 1 {
+		logger.Printf("Expected exactly one operator statefulset but found %d", len(ssets.Items))
+	}
+
+	statefulSet := ssets.Items[0]
 	// since version 1.3 ECK uses standard labels
 	versionLabel := statefulSet.Labels["app.kubernetes.io/version"]
 	parsed, err := version.ParseSemantic(versionLabel)
