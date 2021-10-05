@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/version"
@@ -38,21 +39,18 @@ func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion s
 		}
 		return parsed
 	}
-	// we use the control-plane label since ECK version 1.0
-	ssets, err := c.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "control-plane=elastic-operator"})
+
+	statefulSet, err := findOperatorStatefulSet(c, namespace)
 	if err != nil {
 		logger.Println(err.Error())
 		return fallbackMaxVersion
 	}
-	if len(ssets.Items) == 0 {
+
+	// we were not able to find a StatefulSet we might be dealing with an ECK operator deployed via OLM
+	if statefulSet == nil {
 		return extractVersionFromDeployment(c, namespace)
 	}
 
-	if len(ssets.Items) > 1 {
-		logger.Printf("Expected exactly one operator statefulset but found %d", len(ssets.Items))
-	}
-
-	statefulSet := ssets.Items[0]
 	// since version 1.3 ECK uses standard labels
 	versionLabel := statefulSet.Labels["app.kubernetes.io/version"]
 	parsed, err := version.ParseSemantic(versionLabel)
@@ -61,6 +59,35 @@ func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion s
 	}
 
 	return extractVersionFromContainers(statefulSet.Spec.Template.Spec.Containers)
+}
+
+func findOperatorStatefulSet(c *kubernetes.Clientset, namespace string) (*appsv1.StatefulSet, error) {
+	// we use the control-plane label since ECK version 1.0
+	ssets, err := c.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "control-plane=elastic-operator"})
+	if err != nil {
+		return nil, err
+	}
+
+	// there is the possibility that users have deployed multiple ECK operators into the same namespace which we are
+	// ignoring here by assuming exactly one
+	if len(ssets.Items) == 1 {
+		return &ssets.Items[0], nil
+	}
+
+	// when deployed via Helm we don't have the control-plan label
+	ssets, err = c.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/managed-by=Helm"})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, set := range ssets.Items {
+		// unfortunately the chart name also encodes the version which is what we are trying to find out
+		// that's why  we are doing a substring match here
+		if chart, ok := set.Labels["helm.sh/chart"]; ok && strings.Contains(chart, "eck-operator") {
+			return &set, nil
+		}
+	}
+	return nil, nil
 }
 
 // extractVersionFromContainers tries to find the operator container in the list of containers to extract version information.
