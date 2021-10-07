@@ -19,7 +19,7 @@ Example to run diagnostics for resources namespaces `a` and `b`:
 eck-diagnostics -r a,b
 ```
 
-A full list of available options is reproduced here and is also printed when calling the `eck-diagnostics` binary with the `--help` or `-h` flag:
+A full list of available flags is reproduced here and is also printed when calling the `eck-diagnostics` binary with the `--help` or `-h` flag:
 
 ```
 Usage:
@@ -39,7 +39,7 @@ Flags:
 
 ## Information collected by eck-diagnostics
 
-The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` option.
+The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` flag.
 
 The following Kubernetes resources are retrieved from the cluster being diagnosed:
 
