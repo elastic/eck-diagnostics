@@ -71,6 +71,7 @@ In addition to the resources mentioned above, the following Kubernetes resources
 The ECK related custom resources are included in those namespaces as well: 
 * Agent
 * ApmServer
+* Beat
 * ElasticMapsServer
 * Elasticsearch
 * EnterpriseSearch
