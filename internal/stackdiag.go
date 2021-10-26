@@ -5,10 +5,7 @@
 package internal
 
 import (
-	"archive/tar"
-	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"context"
 	_ "embed"
 	"errors"
@@ -16,8 +13,11 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
+
+	"github.com/elastic/eck-diagnostics/internal/extraction"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"github.com/ghodss/yaml"
@@ -55,27 +55,21 @@ var (
 
 // diagJob represents a pod whose job it is to extract diagnostic data from an Elasticsearch cluster.
 type diagJob struct {
-	podName      string
-	namespace    string // de-normalized for convenience
-	typ          string
-	resourceName string
-	done         bool
+	sync.RWMutex
+	extraction.RemoteSource
+	d bool
 }
 
-// sourceDirPrefix the directory prefix the stack support-diagnostics tool uses in the archive it creates.
-func (j diagJob) sourceDirPrefix() string {
-	prefix := "api-diagnostics"
-	if j.typ == "kibana" {
-		prefix = fmt.Sprintf("%s-%s", j.typ, prefix)
-	}
-	return prefix
+func (d *diagJob) Done() bool {
+	d.RLock()
+	defer d.RUnlock()
+	return d.d
 }
 
-// outputDirPrefix the directory hierarchy we want to use in the archive created by this tool. It should be the namespace
-// of the resource we are creating diagnostics for followed by the type (elasticserach or kibana currently) and the name
-// of the resource.
-func (j diagJob) outputDirPrefix() string {
-	return archive.Path(j.namespace, j.typ, j.resourceName)
+func (d *diagJob) MarkDone() {
+	d.Lock()
+	defer d.Unlock()
+	d.d = true
 }
 
 // diagJobState captures the state of running a set of job to extract diagnostics from Elastic Stack applications.
@@ -93,7 +87,7 @@ type diagJobState struct {
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
 func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string, stopCh chan struct{}) *diagJobState {
-	ctx, cancelFunc := context.WithTimeout(context.Background(), jobTimeout)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientSet,
 		jobPollingInterval,
@@ -166,12 +160,25 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	if err != nil {
 		return err
 	}
-	ds.jobs[podName] = &diagJob{
-		podName:      podName,
-		namespace:    ds.ns,
-		resourceName: resourceName,
-		typ:          typ,
+
+	var job = diagJob{
+		RemoteSource: extraction.RemoteSource{
+			Namespace:    ds.ns,
+			PodName:      podName,
+			Typ:          typ,
+			ResourceName: resourceName,
+			PodOutputDir: podOutputDir,
+		},
 	}
+	go func(j *diagJob) {
+		timer := time.NewTimer(jobTimeout)
+		<-timer.C
+		logger.Printf("Diagnostic job for %s %s/%s timed out, terminating", j.Typ, j.Namespace, j.ResourceName)
+		if err = ds.terminateJob(context.Background(), j); err != nil {
+			logger.Printf("while terminating job %s", err.Error())
+		}
+	}(&job)
+	ds.jobs[podName] = &job
 	return nil
 }
 
@@ -216,7 +223,7 @@ func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *archive.ZipFile
 			return
 		}
 	}()
-	err := ds.untarIntoZip(reader, job, file)
+	err := extraction.UntarIntoZip(reader, job.RemoteSource, file, ds.verbose)
 	if err != nil {
 		file.AddError(err)
 		return
@@ -249,7 +256,7 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 				return
 			}
 
-			if job.done {
+			if job.Done() {
 				return
 			}
 
@@ -284,7 +291,7 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 
 			done := true
 			for _, j := range ds.jobs {
-				if !j.done {
+				if !j.Done() {
 					done = false
 				}
 			}
@@ -306,64 +313,12 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 	file.AddError(ds.abortAllJobs())
 }
 
-// untarIntoZip extracts the files transferred via tar from the Pod into the given ZipFile.
-func (ds *diagJobState) untarIntoZip(reader *io.PipeReader, job *diagJob, file *archive.ZipFile) error {
-	tarReader := tar.NewReader(reader)
-	for {
-		header, err := tarReader.Next()
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				return err
-			}
-			break
-		}
-		remoteFilename := header.Name
-		// remove the path prefix on the Pod
-		relOutputDir := fmt.Sprintf("%s/", strings.TrimPrefix(podOutputDir, "/"))
-		relativeFilename := strings.TrimPrefix(remoteFilename, relOutputDir)
-		// stack diagnostics create output in a directory called api-diagnostics-{{.Timestamp}}
-		if !strings.HasPrefix(relativeFilename, job.sourceDirPrefix()) {
-			if ds.verbose {
-				logger.Printf("Ignoring file %s in tar from %s diagnostics\n", header.Name, job.resourceName)
-			}
-			continue
-		}
-		manifest := archive.StackDiagnosticManifest{DiagType: job.typ}
-
-		switch {
-		case strings.HasSuffix(relativeFilename, "tar.gz"):
-			manifest.DiagPath = job.outputDirPrefix()
-			if err := ds.repackageTarGzip(tarReader, job.outputDirPrefix(), file); err != nil {
-				return err
-			}
-		case strings.HasSuffix(relativeFilename, ".zip"):
-			manifest.DiagPath = job.outputDirPrefix()
-			if err := ds.repackageZip(tarReader, job.outputDirPrefix(), file); err != nil {
-				return err
-			}
-		default:
-			path := archive.Path(ds.ns, job.typ, job.resourceName, relativeFilename)
-			manifest.DiagPath = path
-			out, err := file.Create(path)
-			if err != nil {
-				return err
-			}
-			// accept decompression bomb for CLI as we control the src
-			if _, err := io.Copy(out, tarReader); err != nil { //nolint:gosec
-				return err
-			}
-		}
-		file.AddManifestEntry(manifest)
-	}
-	return nil
-}
-
 // abortAllJobs terminates all open jobs.
 func (ds *diagJobState) abortAllJobs() error {
 	var errs []error
 	for _, j := range ds.jobs {
-		if !j.done {
-			logger.Printf("Aborting diagnostic extraction for %s %s/%s", j.typ, ds.ns, j.resourceName)
+		if !j.Done() {
+			logger.Printf("Aborting diagnostic extraction for %s %s/%s", j.Typ, ds.ns, j.ResourceName)
 			// use a new context for this cleanup as the main context might have been cancelled already
 			errs = append(errs, ds.terminateJob(context.Background(), j))
 		}
@@ -373,14 +328,14 @@ func (ds *diagJobState) abortAllJobs() error {
 
 // completeJob to be called after successful completion, terminates the job.
 func (ds *diagJobState) completeJob(job *diagJob) error {
-	logger.Printf("%s diagnostics extracted for %s/%s\n", strings.Title(job.typ), ds.ns, job.resourceName)
+	logger.Printf("%s diagnostics extracted for %s/%s\n", strings.Title(job.Typ), ds.ns, job.ResourceName)
 	return ds.terminateJob(ds.context, job)
 }
 
 // terminateJob marks job as done and deletes diagnostic Pod.
 func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
-	job.done = true
-	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	job.MarkDone()
+	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 }
 
 // detectImageErrors tries to detect Image pull errors on the diagnostic container. Callers should then terminate the job
@@ -392,99 +347,6 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 		}
 	}
 	return nil
-}
-
-// repackageTarGzip repackages the *.tar.gz archives produced by the support diagnostics tool into the given ZipFile.
-func (ds *diagJobState) repackageTarGzip(in io.Reader, outputDirPrefix string, zipFile *archive.ZipFile) error {
-	gzReader, err := gzip.NewReader(in)
-	if err != nil {
-		return err
-	}
-	topLevelDir := ""
-	tarReader := tar.NewReader(gzReader)
-	for {
-		header, err := tarReader.Next()
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				return err
-			}
-			break
-		}
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if topLevelDir == "" {
-				topLevelDir = header.Name
-			}
-			continue
-		case tar.TypeReg:
-			out, err := zipFile.Create(toOutputPath(header.Name, topLevelDir, outputDirPrefix))
-			if err != nil {
-				return err
-			}
-			// accept decompression bomb for CLI tool and we control the src
-			_, err = io.Copy(out, tarReader) //nolint:gosec
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// repackageZip repackages the *.zip file produced by the support diagnostics tool into the zip file produced by this tool
-func (ds *diagJobState) repackageZip(in io.Reader, outputDirPrefix string, zipFile *archive.ZipFile) error {
-	// it seems the only way to repack a zip archive is to completely read it into memory first
-	b := new(bytes.Buffer)
-	if _, err := b.ReadFrom(in); err != nil {
-		return err
-	}
-
-	zipReader, err := zip.NewReader(bytes.NewReader(b.Bytes()), int64(b.Len()))
-	if err != nil {
-		return err
-	}
-	// api-diagnostics creates a common top folder we don't need when repackaging
-	topLevelDir := ""
-	for _, f := range zipReader.File {
-		// skip all the directory entries
-		if f.UncompressedSize64 == 0 {
-			continue
-		}
-		// extract the tld first time round
-		if topLevelDir == "" {
-			topLevelDir = archive.RootDir(f.Name)
-		}
-		out, err := zipFile.Create(toOutputPath(f.Name, topLevelDir, outputDirPrefix))
-		if err != nil {
-			return err
-		}
-		if err := copyFromZip(f, out); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// copyFromZip writes the contents of file f from a zip file into out.
-func copyFromZip(f *zip.File, out io.Writer) error {
-	rc, err := f.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-
-	if _, err := io.Copy(out, rc); err != nil { //nolint:gosec
-		return err
-	}
-	return nil
-}
-
-// toOutputPath removes the path prefix topLevelDir from original and re-bases it in outputDirPrefix.
-func toOutputPath(original, topLevelDir, outputDirPrefix string) string {
-	// topLevelDir should always be a Unix-style path like /api-diagnostics-20210907-133527 so a simple trim should suffice
-	// and avoids filepath.* functions that would insert platform specific path elements that are incompatible with
-	// the ZIP format.
-	return archive.Path(outputDirPrefix, strings.TrimPrefix(original, topLevelDir))
 }
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official

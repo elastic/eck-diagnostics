@@ -9,21 +9,19 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"time"
+
+	"github.com/elastic/eck-diagnostics/internal/log"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"k8s.io/apimachinery/pkg/util/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // auth on gke
 )
 
-var (
-	logBuffer bytes.Buffer
-	logger    = log.New(io.MultiWriter(os.Stdout, &logBuffer), "", log.LstdFlags)
-)
+var logger = log.Logger
 
 // Params is a collection of parameters controlling the extraction of diagnostic data.
 // See the main command for explanation of individual parameters.
@@ -193,7 +191,7 @@ LOOP:
 		}
 	}
 
-	addDiagnosticLogToArchive(zipFile, &logBuffer)
+	addDiagnosticLogToArchive(zipFile, &log.Buffer)
 
 	if err := zipFile.Close(); err != nil {
 		// log the errors here and don't return them to the invoking command as we don't want usage help to be
