@@ -170,6 +170,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 			PodOutputDir: podOutputDir,
 		},
 	}
+	// start a dedicated timer for each job and terminate the job when the timer expires.
 	go func(j *diagJob) {
 		timer := time.NewTimer(jobTimeout)
 		<-timer.C

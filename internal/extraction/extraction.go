@@ -14,13 +14,14 @@ import (
 	"io"
 	"strings"
 
-	"github.com/elastic/eck-diagnostics/internal/log"
-
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/log"
 )
 
 var logger = log.Logger
 
+// RemoteSource describes are remote (i.e. in-cluster) source of diagnostic data in a Pod that has run the Elastic
+// stack support-diagnostics and is waiting for the diagnostic data to be extracted.
 type RemoteSource struct {
 	Namespace    string // de-normalized for convenience
 	PodName      string
