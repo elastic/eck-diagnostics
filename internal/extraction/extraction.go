@@ -20,7 +20,7 @@ import (
 
 var logger = log.Logger
 
-// RemoteSource describes are remote (i.e. in-cluster) source of diagnostic data in a Pod that has run the Elastic
+// RemoteSource describes a remote (i.e. in-cluster) source of diagnostic data in a Pod that has run the Elastic
 // stack support-diagnostics and is waiting for the diagnostic data to be extracted.
 type RemoteSource struct {
 	Namespace    string // de-normalized for convenience
@@ -40,7 +40,7 @@ func (j *RemoteSource) sourceDirPrefix() string {
 }
 
 // outputDirPrefix the directory hierarchy we want to use in the archive created by this tool. It should be the Namespace
-// of the resource we are creating diagnostics for followed by the type (elasticserach or kibana currently) and the name
+// of the resource we are creating diagnostics for followed by the type (elasticsearch or kibana currently) and the name
 // of the resource.
 func (j *RemoteSource) outputDirPrefix() string {
 	return archive.Path(j.Namespace, j.Typ, j.ResourceName)
@@ -125,7 +125,7 @@ func RepackageTarGzip(in io.Reader, outputDirPrefix string, zipFile *archive.Zip
 			if err != nil {
 				return err
 			}
-			// accept decompression bomb for CLI tool and we control the src
+			// accept decompression bomb for CLI tool as we control the src
 			_, err = io.Copy(out, tarReader) //nolint:gosec
 			if err != nil {
 				return err
@@ -135,7 +135,7 @@ func RepackageTarGzip(in io.Reader, outputDirPrefix string, zipFile *archive.Zip
 	return nil
 }
 
-// RepackageZip repackages the *.zip file produced by the support diagnostics tool into the zip file produced by this tool
+// RepackageZip repackages the *.zip file produced by the support diagnostics tool into the zip file produced by this tool.
 func RepackageZip(in io.Reader, outputDirPrefix string, zipFile *archive.ZipFile) error {
 	// it seems the only way to repack a zip archive is to completely read it into memory first
 	b := new(bytes.Buffer)

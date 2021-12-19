@@ -17,9 +17,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/elastic/eck-diagnostics/internal/extraction"
-
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/extraction"
 	"github.com/ghodss/yaml"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,6 +41,10 @@ const (
 
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "offer-output"
+
+	// names used to identify different stack diagnostc job types (need to match the names of the corresponding CRDs)
+	elasticsearchJob = "elasticsearch"
+	kibanaJob        = "kibana"
 )
 
 var (
@@ -57,7 +60,16 @@ var (
 type diagJob struct {
 	sync.RWMutex
 	extraction.RemoteSource
-	d bool
+	d     bool
+	timer *time.Timer
+	done  chan struct{}
+}
+
+func (d *diagJob) StartTimer(dur time.Duration) <-chan time.Time {
+	d.Lock()
+	defer d.Unlock()
+	d.timer = time.NewTimer(dur)
+	return d.timer.C
 }
 
 func (d *diagJob) Done() bool {
@@ -70,9 +82,15 @@ func (d *diagJob) MarkDone() {
 	d.Lock()
 	defer d.Unlock()
 	d.d = true
+	if d.timer != nil {
+		// We are OK with not draining the timer channel here. We do not want to reuse it, and we don't want to block
+		// under any circumstance. The only point here is to avoid the timer from firing once the job is complete.
+		d.timer.Stop()
+	}
+	d.done <- struct{}{}
 }
 
-// diagJobState captures the state of running a set of job to extract diagnostics from Elastic Stack applications.
+// diagJobState captures the state of running a set of jobs to extract diagnostics from Elastic Stack applications.
 type diagJobState struct {
 	ns              string
 	clientSet       *kubernetes.Clientset
@@ -121,13 +139,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 		return err
 	}
 
-	diagnosticType := "api"
-	shortType := "es"
-
-	if typ == "kibana" {
-		shortType = "kb"
-		diagnosticType = "kibana-api"
-	}
+	diagnosticType, shortType := ds.diagnosticTypeForApplication(typ)
 
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
@@ -169,18 +181,36 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 			ResourceName: resourceName,
 			PodOutputDir: podOutputDir,
 		},
+		done: make(chan struct{}, 1),
 	}
 	// start a dedicated timer for each job and terminate the job when the timer expires.
 	go func(j *diagJob) {
-		timer := time.NewTimer(jobTimeout)
-		<-timer.C
-		logger.Printf("Diagnostic job for %s %s/%s timed out, terminating", j.Typ, j.Namespace, j.ResourceName)
-		if err = ds.terminateJob(context.Background(), j); err != nil {
-			logger.Printf("while terminating job %s", err.Error())
+		timerChan := j.StartTimer(jobTimeout)
+		select {
+		case <-timerChan:
+			logger.Printf("Diagnostic job for %s %s/%s timed out, terminating", j.Typ, j.Namespace, j.ResourceName)
+			if err = ds.terminateJob(context.Background(), j); err != nil {
+				logger.Printf("while terminating job %s", err.Error())
+			}
+		case <-j.done:
+			// we use separate done signal here to avoid building up lots of go routines that are only terminated by
+			// the overall termination of the program if a job does not exceed its timeout.
 		}
 	}(&job)
 	ds.jobs[podName] = &job
 	return nil
+}
+
+// diagnosticTypeForApplication return the diagnosticType as expected by the stack diagnostics tool and a short type
+// matching the shorthand used by ECK in service names for the given application type.
+func (ds *diagJobState) diagnosticTypeForApplication(typ string) (string, string) {
+	switch typ {
+	case elasticsearchJob:
+		return "api", "es"
+	case kibanaJob:
+		return "kibana-api", "kb"
+	}
+	panic("programming error: unknown type")
 }
 
 // extractFromRemote runs the equivalent of "kubectl cp" to extract the stack diagnostics from a remote Pod.
@@ -365,11 +395,11 @@ func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 	}
 	state := newDiagJobState(clientSet, config, ns, verbose, image, stopCh)
 
-	if err := scheduleJobs(k, ns, zipFile.AddError, state, "elasticsearch"); err != nil {
+	if err := scheduleJobs(k, ns, zipFile.AddError, state, elasticsearchJob); err != nil {
 		zipFile.AddError(err)
 		return
 	}
-	if err := scheduleJobs(k, ns, zipFile.AddError, state, "kibana"); err != nil {
+	if err := scheduleJobs(k, ns, zipFile.AddError, state, kibanaJob); err != nil {
 		zipFile.AddError(err)
 		return
 	}

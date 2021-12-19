@@ -14,9 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/elastic/eck-diagnostics/internal/log"
-
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/log"
 	"k8s.io/apimachinery/pkg/util/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // auth on gke
 )
