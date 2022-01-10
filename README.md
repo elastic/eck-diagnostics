@@ -12,14 +12,14 @@ Go to the [releases](https://github.com/elastic/eck-diagnostics/releases) page a
 
 Just execute the binary. On macOS versions with Gatekeeper enabled you have to explicitly allow the execution the first time round, as described in this [support article](https://support.apple.com/en-us/HT202491) (in the section "If you want to open an app that hasn’t been notarized or is from an unidentified developer"). 
 
-By default the tool will run diagnostics for the `elastic-system` namespace, where the ECK operator typically resides, and the `default` namespace.
+To run diagnostics, you need to specify at least the workload resource namespace(s). The operator namespace is set by default to the `elastic-system` namespace, where the ECK operator typically resides.
 
-To run diagnostics, for example, for namespaces `a` and `b` instead:
+For example, to run diagnostics for resource namespaces `a` and `b`:
 ```shell
 eck-diagnostics -r a,b
 ```
 
-A full list of available options is reproduced here and is also printed when calling the `eck-diagnostics` binary with the `--help` or `-h` flag:
+A full list of available flags is reproduced here and is also printed when calling the `eck-diagnostics` binary with the `--help` or `-h` flag:
 
 ```
 Usage:
@@ -39,7 +39,7 @@ Flags:
 
 ## Information collected by eck-diagnostics
 
-The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` option.
+The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` flag.
 
 The following Kubernetes resources are retrieved from the cluster being diagnosed:
 
@@ -71,10 +71,11 @@ In addition to the resources mentioned above, the following Kubernetes resources
 The ECK related custom resources are included in those namespaces as well: 
 * Agent
 * ApmServer
+* Beat
 * ElasticMapsServer
 * Elasticsearch
 * EnterpriseSearch
 * Kibana
 
 ### Logs
-In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only those logs that originate in Pods managed by ECK are collected .
+In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only logs from Pods managed by ECK are collected.
