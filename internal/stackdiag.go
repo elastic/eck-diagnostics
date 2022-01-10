@@ -42,7 +42,7 @@ const (
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "offer-output"
 
-	// names used to identify different stack diagnostc job types (need to match the names of the corresponding CRDs)
+	// names used to identify different stack diagnostic job types (need to match the names of the corresponding CRDs)
 	elasticsearchJob = "elasticsearch"
 	kibanaJob        = "kibana"
 )
@@ -201,7 +201,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	return nil
 }
 
-// diagnosticTypeForApplication return the diagnosticType as expected by the stack diagnostics tool and a short type
+// diagnosticTypeForApplication returns the diagnosticType as expected by the stack diagnostics tool and a short type
 // matching the shorthand used by ECK in service names for the given application type.
 func diagnosticTypeForApplication(typ string) (string, string) {
 	switch typ {
