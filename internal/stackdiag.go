@@ -139,7 +139,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 		return err
 	}
 
-	diagnosticType, shortType := ds.diagnosticTypeForApplication(typ)
+	diagnosticType, shortType := diagnosticTypeForApplication(typ)
 
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
@@ -203,7 +203,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 
 // diagnosticTypeForApplication return the diagnosticType as expected by the stack diagnostics tool and a short type
 // matching the shorthand used by ECK in service names for the given application type.
-func (ds *diagJobState) diagnosticTypeForApplication(typ string) (string, string) {
+func diagnosticTypeForApplication(typ string) (string, string) {
 	switch typ {
 	case elasticsearchJob:
 		return "api", "es"
