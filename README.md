@@ -12,7 +12,7 @@ Go to the [releases](https://github.com/elastic/eck-diagnostics/releases) page a
 
 Just execute the binary. On macOS versions with Gatekeeper enabled you have to explicitly allow the execution the first time round, as described in this [support article](https://support.apple.com/en-us/HT202491) (in the section "If you want to open an app that hasn’t been notarized or is from an unidentified developer"). 
 
-To run diagnostics, you need to specify at least the workload resources namespace(s). The operator namespace is set by default to the `elastic-system` namespace, where the ECK operator typically resides.
+To run diagnostics, you need to specify at least the workload resource namespace(s). The operator namespace is set by default to the `elastic-system` namespace, where the ECK operator typically resides.
 
 For example, to run diagnostics for resources namespaces `a` and `b`:
 ```shell
