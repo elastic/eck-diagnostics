@@ -14,7 +14,7 @@ Just execute the binary. On macOS versions with Gatekeeper enabled you have to e
 
 To run diagnostics, you need to specify at least the workload resource namespace(s). The operator namespace is set by default to the `elastic-system` namespace, where the ECK operator typically resides.
 
-For example, to run diagnostics for resources namespaces `a` and `b`:
+For example, to run diagnostics for resource namespaces `a` and `b`:
 ```shell
 eck-diagnostics -r a,b
 ```
