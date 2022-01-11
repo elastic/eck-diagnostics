@@ -92,6 +92,9 @@ func Run(params Params) error {
 		"clusterroles.txt": func(writer io.Writer) error {
 			return kubectl.Describe("clusterroles", "elastic", "", writer)
 		},
+		"clusterrolebindings.txt": func(writer io.Writer) error {
+			return kubectl.Describe("clusterrolebindings", "elastic", "", writer)
+		},
 	})
 
 	operatorVersions := make([]*version.Version, 0, len(params.OperatorNamespaces))
@@ -109,6 +112,7 @@ func Run(params Params) error {
 			"events",
 			"networkpolicies",
 			"controllerrevisions",
+			"serviceaccount",
 		}))
 
 		zipFile.Add(map[string]func(io.Writer) error{
@@ -150,6 +154,7 @@ LOOP:
 			"kibana",
 			"elasticsearch",
 			"apmserver",
+			"serviceaccount",
 		}))
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
