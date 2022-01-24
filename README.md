@@ -48,6 +48,7 @@ The following Kubernetes resources are retrieved from the cluster being diagnose
 * Kubernetes nodes
 * PodSecurityPolicy
 * ClusterRole
+* ClusterRoleBindings
 
 ### In all operator and workload resource namespaces 
 * StatefulSet
@@ -58,6 +59,7 @@ The following Kubernetes resources are retrieved from the cluster being diagnose
 * NetworkPolicy
 * ControllerRevision
 * Secret (metadata only)
+* ServiceAccount
 
 ### In the workload resources namespaces
 In addition to the resources mentioned above, the following Kubernetes resources are retrieved:
