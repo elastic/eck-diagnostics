@@ -20,6 +20,7 @@ import (
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure" // auth on azure (deprecated)
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"   // auth on gke (deprecated)
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"  // auth flow for OpenID Connect (deprecated)
 )
 
 var logger = log.Logger
