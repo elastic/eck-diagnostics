@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.1.4"
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.2.8"
 
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "stack-diagnostics"
@@ -375,7 +375,7 @@ func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 // detectImageErrors tries to detect Image pull errors on the diagnostic container. Callers should then terminate the job
 // as there is little chance of the image being made available during the execution time of the tool.
 func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
-	for _, status := range pod.Status.InitContainerStatuses {
+	for _, status := range pod.Status.ContainerStatuses {
 		if status.State.Waiting != nil && strings.Contains(status.State.Waiting.Reason, "Image") {
 			return fmt.Errorf("failed running stack diagnostics: %s:%s", status.State.Waiting.Reason, status.State.Waiting.Message)
 		}
