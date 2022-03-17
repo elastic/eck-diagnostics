@@ -7,9 +7,8 @@ metadata:
     app.kubernetes.io/name: eck-diagnostics
 spec:
   terminationGracePeriodSeconds: 0
-  initContainers:
-    - name: diagnostics
-      # image built as described in https://github.com/elastic/support-diagnostics#creating-a-docker-image
+  containers:
+    - name: {{ .MainContainerName }}
       image: {{ .DiagnosticImage }}
       imagePullPolicy: IfNotPresent
       env:
@@ -18,9 +17,20 @@ spec:
             secretKeyRef:
               name: {{ .ESName }}-es-elastic-user
               key: elastic
+      volumeMounts:
+        - name: output
+          mountPath: {{ .OutputDir }}
       command: [sh, -c]
       args:
-        - ./diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o {{ .OutputDir }}
+        - |
+          ./diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o {{ .OutputDir }}
+          touch /ready
+          while true; do sleep 1; done;
+      readinessProbe:
+        exec:
+          command:
+            - cat
+            - /ready
       resources:
         requests:
           memory: 20Mi
@@ -28,28 +38,6 @@ spec:
         limits:
           memory: 2Gi
           cpu: 1
-      volumeMounts:
-        - name: output
-          mountPath: {{ .OutputDir }}
-  containers:
-    - name: {{ .MainContainerName }}
-      image: {{ .DiagnosticImage }}
-      volumeMounts:
-        - name: output
-          mountPath: {{ .OutputDir }}
-      command: [sh, -c]
-      # diagnostics run in an initContainer. When the Pod becomes ready we know we can retrieve them, so we just wait here
-      # for a client copying the result
-      args:
-        - |
-          while true; do sleep 1; done;
-      resources:
-        requests:
-          memory: 16Mi
-          cpu: 50m
-        limits:
-          memory: 16Mi
-          cpu: 50m
   volumes:
     - name: output
       emptyDir: {}

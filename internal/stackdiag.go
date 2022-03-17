@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/cmd/exec"
+	"k8s.io/kubectl/pkg/util/podutils"
 	"k8s.io/utils/pointer"
 )
 
@@ -40,7 +41,7 @@ const (
 	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.1.4"
 
 	podOutputDir         = "/diagnostic-output"
-	podMainContainerName = "offer-output"
+	podMainContainerName = "stack-diagnostics"
 
 	// names used to identify different stack diagnostic job types (need to match the names of the corresponding CRDs)
 	elasticsearchJob = "elasticsearch"
@@ -300,7 +301,9 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 			case corev1.PodUnknown:
 				logger.Printf("Unexpected diagnostic Pod %s/%s in unknown phase", pod.Namespace, pod.Name)
 			case corev1.PodRunning:
-				ds.extractFromRemote(pod, file)
+				if podutils.IsPodReady(pod) {
+					ds.extractFromRemote(pod, file)
+				}
 			case corev1.PodSucceeded:
 				file.AddError(fmt.Errorf("unexpected: Pod %s/%s succeeded", pod.Namespace, pod.Name))
 				file.AddError(ds.completeJob(job))
