@@ -89,6 +89,9 @@ func Run(params Params) error {
 		"podsecuritypolicies.json": func(writer io.Writer) error {
 			return kubectl.Get("podsecuritypolicies", "", writer)
 		},
+		"storageclasses.json": func(writer io.Writer) error {
+			return kubectl.Get("storageclasses", "", writer)
+		},
 		"clusterroles.txt": func(writer io.Writer) error {
 			return kubectl.Describe("clusterroles", "elastic", "", writer)
 		},
