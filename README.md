@@ -49,6 +49,7 @@ The following Kubernetes resources are retrieved from the cluster being diagnose
 * PodSecurityPolicy
 * ClusterRole
 * ClusterRoleBindings
+* StorageClass
 
 ### In all operator and workload resource namespaces 
 * StatefulSet
