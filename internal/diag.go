@@ -35,6 +35,7 @@ type Params struct {
 	ResourcesNamespaces []string
 	OutputDir           string
 	RunStackDiagnostics bool
+	RunAgentDiagnostics bool
 	Verbose             bool
 }
 
@@ -59,7 +60,7 @@ func Run(params Params) error {
 		close(stopCh)
 	}()
 
-	kubectl, err := NewKubectl(params.Kubeconfig)
+	kubectl, err := NewKubectl(params.Kubeconfig, params.Verbose)
 	if err != nil {
 		return err
 	}
@@ -198,6 +199,10 @@ LOOP:
 
 		if params.RunStackDiagnostics {
 			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stopCh)
+		}
+
+		if params.RunAgentDiagnostics {
+			runAgentDiagnostics(kubectl, ns, zipFile, params.Verbose, stopCh)
 		}
 	}
 

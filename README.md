@@ -33,13 +33,14 @@ Flags:
   -o, --operator-namespaces strings    Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
       --output-directory string        Path where to output diagnostic results
   -r, --resources-namespaces strings   Comma-separated list of namespace(s) in which resources are managed
+      --run-agent-diagnostics          Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
       --run-stack-diagnostics          Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
       --verbose                        Verbose mode
 ```
 
 ## Information collected by eck-diagnostics
 
-The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` flag.
+The eck-diagnostics retrieves Kubernetes API server resources and log files and, unless disabled, it runs Elastic [support-diagnostics](https://github.com/elastic/support-diagnostics) on Elasticsearch and Kibana instances installed in the namespaces indicated by the `-r, --resources-namespaces` flag. In addition it can optionally run the [diagnostic subcommand](https://www.elastic.co/guide/en/fleet/current/elastic-agent-cmd-options.html#elastic-agent-diagnostics-command) on all running Elastic Agents. Please note that credentials are not redacted in the Elastic Agent diagnostics and may appear in plain text inside the diagnostics archive. Elastic Agent diagnostics are therefore disabled by default.
 
 The following Kubernetes resources are retrieved from the cluster being diagnosed:
 

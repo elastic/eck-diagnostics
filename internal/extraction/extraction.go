@@ -33,8 +33,11 @@ type RemoteSource struct {
 // sourceDirPrefix the directory prefix the stack support-diagnostics tool uses in the archive it creates.
 func (j *RemoteSource) sourceDirPrefix() string {
 	prefix := "api-diagnostics"
-	if j.Typ == "kibana" {
+	switch j.Typ {
+	case "kibana":
 		prefix = fmt.Sprintf("%s-%s", j.Typ, prefix)
+	case "agent":
+		prefix = ""
 	}
 	return prefix
 }

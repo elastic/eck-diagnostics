@@ -10,12 +10,14 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"github.com/elastic/eck-diagnostics/internal/extraction"
@@ -26,13 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubectl/pkg/cmd/exec"
 	"k8s.io/kubectl/pkg/util/podutils"
 	"k8s.io/utils/pointer"
 )
@@ -94,8 +92,7 @@ func (d *diagJob) MarkDone() {
 // diagJobState captures the state of running a set of jobs to extract diagnostics from Elastic Stack applications.
 type diagJobState struct {
 	ns              string
-	clientSet       *kubernetes.Clientset
-	config          *rest.Config
+	kubectl         *Kubectl
 	informer        cache.SharedInformer
 	jobs            map[string]*diagJob
 	context         context.Context
@@ -105,10 +102,10 @@ type diagJobState struct {
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns string, verbose bool, image string, stopCh chan struct{}) *diagJobState {
+func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, stopCh chan struct{}) *diagJobState {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	factory := informers.NewSharedInformerFactoryWithOptions(
-		clientSet,
+		k,
 		jobPollingInterval,
 		informers.WithNamespace(ns),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -117,8 +114,7 @@ func newDiagJobState(clientSet *kubernetes.Clientset, config *rest.Config, ns st
 	state := &diagJobState{
 		jobs:            map[string]*diagJob{},
 		ns:              ns,
-		clientSet:       clientSet,
-		config:          config,
+		kubectl:         k,
 		informer:        factory.Core().V1().Pods().Informer(),
 		cancelFunc:      cancelFunc,
 		context:         ctx,
@@ -164,12 +160,12 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 		return err
 	}
 
-	err = ds.clientSet.CoreV1().Pods(ds.ns).Delete(context.Background(), podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	err = ds.kubectl.CoreV1().Pods(ds.ns).Delete(context.Background(), podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	_, err = ds.clientSet.CoreV1().Pods(ds.ns).Create(context.Background(), &pod, metav1.CreateOptions{})
+	_, err = ds.kubectl.CoreV1().Pods(ds.ns).Create(context.Background(), &pod, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -221,42 +217,13 @@ func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *archive.ZipFile
 		file.AddError(fmt.Errorf("no job for Pod %s/%s", pod.Namespace, pod.Name))
 		return
 	}
-	execErrOut := io.Discard
-	if ds.verbose {
-		execErrOut = os.Stderr
-	}
-	reader, outStream := io.Pipe()
-	options := &exec.ExecOptions{
-		StreamOptions: exec.StreamOptions{
-			IOStreams: genericclioptions.IOStreams{
-				In:     nil,
-				Out:    outStream,
-				ErrOut: execErrOut,
-			},
-
-			Namespace:     pod.Namespace,
-			PodName:       pod.Name,
-			ContainerName: podMainContainerName,
-		},
-		Config:    ds.config,
-		PodClient: ds.clientSet.CoreV1(),
-		Command:   []string{"tar", "cf", "-", podOutputDir},
-		Executor:  &exec.DefaultRemoteExecutor{},
-	}
-	go func() {
-		defer func() {
-			// TODO: this routine never terminates in my experiments and this code never runs
-			// we are effectively leaking go routines for every diagnostic we run
-			outStream.Close()
-		}()
-		err := options.Run()
-		if err != nil {
-			file.AddError(err)
-			return
-		}
-	}()
-	err := extraction.UntarIntoZip(reader, job.RemoteSource, file, ds.verbose)
+	nsn := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
+	reader, err := ds.kubectl.Copy(nsn, podMainContainerName, podOutputDir, file.AddError)
 	if err != nil {
+		file.AddError(err)
+		return
+	}
+	if err := extraction.UntarIntoZip(reader, job.RemoteSource, file, ds.verbose); err != nil {
 		file.AddError(err)
 		return
 	}
@@ -362,14 +329,14 @@ func (ds *diagJobState) abortAllJobs() error {
 
 // completeJob to be called after successful completion, terminates the job.
 func (ds *diagJobState) completeJob(job *diagJob) error {
-	logger.Printf("%s diagnostics extracted for %s/%s\n", strings.Title(job.Typ), ds.ns, job.ResourceName)
+	logger.Printf("%s diagnostics extracted for %s/%s\n", cases.Title(language.English).String(job.Typ), ds.ns, job.ResourceName)
 	return ds.terminateJob(ds.context, job)
 }
 
 // terminateJob marks job as done and deletes diagnostic Pod.
 func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	job.MarkDone()
-	return ds.clientSet.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	return ds.kubectl.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
 }
 
 // detectImageErrors tries to detect Image pull errors on the diagnostic container. Callers should then terminate the job
@@ -386,17 +353,7 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
 func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, stopCh chan struct{}) {
-	config, err := k.factory.ToRESTConfig()
-	if err != nil {
-		zipFile.AddError(err)
-		return // not recoverable let's stop here
-	}
-	clientSet, err := k.factory.KubernetesClientSet()
-	if err != nil {
-		zipFile.AddError(err)
-		return // not recoverable
-	}
-	state := newDiagJobState(clientSet, config, ns, verbose, image, stopCh)
+	state := newDiagJobState(k, ns, verbose, image, stopCh)
 
 	if err := scheduleJobs(k, ns, zipFile.AddError, state, elasticsearchJob); err != nil {
 		zipFile.AddError(err)
