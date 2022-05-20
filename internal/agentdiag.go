@@ -57,8 +57,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		nsn := types.NamespacedName{Namespace: ns, Name: resourceName}
 
 		logger.Printf("Extracting agent diagnostics for %s", nsn)
-		err = k.Exec(nsn, "elastic-agent", "diagnostics", "collect", "-f", outputFile)
-		if err != nil {
+		if err = k.Exec(nsn, "elastic-agent", "diagnostics", "collect", "-f", outputFile); err != nil {
 			zipFile.AddError(fmt.Errorf("while extracting agent diagnostics: %w", err))
 			return nil
 		}
