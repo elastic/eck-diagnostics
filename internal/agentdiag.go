@@ -34,7 +34,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		resourceName := info.Name
 		labels, err := meta.NewAccessor().Labels(info.Object)
 		if err != nil {
-			zipFile.AddError(fmt.Errorf("while accessing labels for %s/%s: %w", resourceName, ns, err))
+			zipFile.AddError(fmt.Errorf("while accessing labels for %s/%s: %w", ns, resourceName, err))
 			return nil
 		}
 
