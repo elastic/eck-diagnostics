@@ -25,8 +25,10 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/kubectl/pkg/cmd/exec"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
@@ -36,14 +38,17 @@ import (
 // Kubectl provides utilities based on the kubectl API.
 type Kubectl struct {
 	defaultNamespace string
-	factory          cmdutil.Factory
-	openAPISchema    openapi.Resources
-	out              io.Writer
-	errOut           io.Writer
+	config           *rest.Config
+	*kubernetes.Clientset
+	factory       cmdutil.Factory
+	openAPISchema openapi.Resources
+	out           io.Writer
+	errOut        io.Writer
+	verbose       bool
 }
 
 // NewKubectl creates a new instance of Kubectl.
-func NewKubectl(kubeConfig string) (*Kubectl, error) {
+func NewKubectl(kubeConfig string, verbose bool) (*Kubectl, error) {
 	confFlags := genericclioptions.NewConfigFlags(true)
 	if kubeConfig != "" {
 		confFlags.KubeConfig = &kubeConfig
@@ -56,12 +61,24 @@ func NewKubectl(kubeConfig string) (*Kubectl, error) {
 		return nil, fmt.Errorf("failed to retrieve OpenAPI schema: %w", err)
 	}
 
+	config, err := factory.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	clientSet, err := factory.KubernetesClientSet()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Kubectl{
+		Clientset:        clientSet,
 		defaultNamespace: "default",
+		config:           config,
 		factory:          factory,
 		openAPISchema:    openAPISchema,
 		out:              os.Stdout,
 		errOut:           os.Stderr,
+		verbose:          verbose,
 	}, nil
 }
 
@@ -77,6 +94,68 @@ func (c Kubectl) CheckNamespaces(ctx context.Context, nss []string) error {
 		}
 	}
 	return nil
+}
+
+func (c Kubectl) Copy(nsn types.NamespacedName, container string, path string, recordErr func(error)) (*io.PipeReader, error) {
+	execErrOut := io.Discard
+	if c.verbose {
+		execErrOut = c.errOut
+	}
+	reader, outStream := io.Pipe()
+	options := &exec.ExecOptions{
+		StreamOptions: exec.StreamOptions{
+			IOStreams: genericclioptions.IOStreams{
+				In:     nil,
+				Out:    outStream,
+				ErrOut: execErrOut,
+			},
+
+			Namespace:     nsn.Namespace,
+			PodName:       nsn.Name,
+			ContainerName: container,
+		},
+		Config:    c.config,
+		PodClient: c.CoreV1(),
+		Command:   []string{"tar", "cf", "-", path},
+		Executor:  &exec.DefaultRemoteExecutor{},
+	}
+	go func() {
+		defer func() {
+			// TODO: this routine never terminates in my experiments and this code never runs
+			// we are effectively leaking go routines for every diagnostic we run
+			outStream.Close()
+		}()
+		err := options.Run()
+		if err != nil {
+			recordErr(err)
+			return
+		}
+	}()
+	return reader, nil
+}
+
+func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
+	execErrOut := io.Discard
+	if c.verbose {
+		execErrOut = c.errOut
+	}
+	options := &exec.ExecOptions{
+		StreamOptions: exec.StreamOptions{
+			IOStreams: genericclioptions.IOStreams{
+				In:     nil,
+				Out:    nil,
+				ErrOut: execErrOut,
+			},
+
+			Namespace: nsn.Namespace,
+			PodName:   nsn.Name,
+		},
+		Config:    c.config,
+		PodClient: c.CoreV1(),
+		Command:   cmd,
+		Executor:  &exec.DefaultRemoteExecutor{},
+	}
+	return options.Run()
 }
 
 // Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
@@ -104,6 +183,25 @@ func (c Kubectl) getResources(resource string, namespace string) (*resource.Resu
 		Unstructured().
 		NamespaceParam(namespace).DefaultNamespace().AllNamespaces(false).
 		ResourceTypeOrNameArgs(true, resource).
+		ContinueOnError().
+		Latest().
+		Flatten().
+		Do()
+
+	r.IgnoreErrors(apierrors.IsNotFound)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// getResourcesMatching retrieves the K8s objects of type resource matching label selector and returns a resource.Result.
+func (c Kubectl) getResourcesMatching(resource string, namespace string, selector string) (*resource.Result, error) {
+	r := c.factory.NewBuilder().
+		Unstructured().
+		NamespaceParam(namespace).DefaultNamespace().AllNamespaces(false).
+		ResourceTypeOrNameArgs(true, resource).
+		LabelSelector(selector).
 		ContinueOnError().
 		Latest().
 		Flatten().
