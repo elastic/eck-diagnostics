@@ -14,9 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubectl/pkg/cmd/exec"
-
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,8 +25,10 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/kubectl/pkg/cmd/exec"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
