@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/ghodss/yaml v1.0.0
-	github.com/spf13/cobra v1.4.0
+	github.com/spf13/cobra v1.5.0
 	golang.org/x/text v0.3.7
 	k8s.io/api v0.24.2
 	k8s.io/apimachinery v0.24.2
