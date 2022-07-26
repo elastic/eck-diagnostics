@@ -48,8 +48,6 @@ const (
 var (
 	//go:embed job.tpl.yml
 	jobTemplate string
-	// jobTimeout governs how long at most diagnostic data extraction may take.
-	jobTimeout = 5 * time.Minute
 	// jobPollingInterval is used to configure the informer used to be notified of Pod status changes.
 	jobPollingInterval = 10 * time.Second
 )
@@ -98,10 +96,11 @@ type diagJobState struct {
 	cancelFunc      context.CancelFunc
 	verbose         bool
 	diagnosticImage string
+	jobTimeout      time.Duration
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, stopCh chan struct{}) *diagJobState {
+func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}) *diagJobState {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		k,
@@ -119,6 +118,7 @@ func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, stopCh c
 		context:         ctx,
 		verbose:         verbose,
 		diagnosticImage: image,
+		jobTimeout:      jobTimeout,
 	}
 	go func() {
 		<-stopCh
@@ -181,7 +181,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	}
 	// start a dedicated timer for each job and terminate the job when the timer expires.
 	go func(j *diagJob) {
-		timerChan := j.StartTimer(jobTimeout)
+		timerChan := j.StartTimer(ds.jobTimeout)
 		select {
 		case <-timerChan:
 			logger.Printf("Diagnostic job for %s %s/%s timed out, terminating", j.Typ, j.Namespace, j.ResourceName)
@@ -351,8 +351,8 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, stopCh chan struct{}) {
-	state := newDiagJobState(k, ns, verbose, image, stopCh)
+func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}) {
+	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
 
 	if err := scheduleJobs(k, ns, zipFile.AddError, state, elasticsearchJob); err != nil {
 		zipFile.AddError(err)

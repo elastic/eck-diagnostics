@@ -28,15 +28,16 @@ var logger = log.Logger
 // Params is a collection of parameters controlling the extraction of diagnostic data.
 // See the main command for explanation of individual parameters.
 type Params struct {
-	DiagnosticImage     string
-	ECKVersion          string
-	Kubeconfig          string
-	OperatorNamespaces  []string
-	ResourcesNamespaces []string
-	OutputDir           string
-	RunStackDiagnostics bool
-	RunAgentDiagnostics bool
-	Verbose             bool
+	DiagnosticImage         string
+	ECKVersion              string
+	Kubeconfig              string
+	OperatorNamespaces      []string
+	ResourcesNamespaces     []string
+	OutputDir               string
+	RunStackDiagnostics     bool
+	RunAgentDiagnostics     bool
+	Verbose                 bool
+	StackDiagnosticsTimeout time.Duration
 }
 
 // AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
@@ -198,7 +199,7 @@ LOOP:
 		)
 
 		if params.RunStackDiagnostics {
-			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, stopCh)
+			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, params.StackDiagnosticsTimeout, stopCh)
 		}
 
 		if params.RunAgentDiagnostics {
