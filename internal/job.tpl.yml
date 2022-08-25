@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/name: eck-diagnostics
 spec:
   terminationGracePeriodSeconds: 0
+  automountServiceAccountToken: false
   containers:
     - name: {{ .MainContainerName }}
       image: {{ .DiagnosticImage }}
