@@ -12,6 +12,9 @@ spec:
     - name: {{ .MainContainerName }}
       image: {{ .DiagnosticImage }}
       imagePullPolicy: IfNotPresent
+      securityContext:
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
       env:
         - name: ES_PW
           valueFrom:
@@ -24,14 +27,15 @@ spec:
       command: [sh, -c]
       args:
         - |
-          ./diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o {{ .OutputDir }}
-          touch /ready
+          cd {{ .OutputDir }}
+          /support-diagnostics/diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o .
+          touch ready
           while true; do sleep 1; done;
       readinessProbe:
         exec:
           command:
             - cat
-            - /ready
+            - {{ .OutputDir }}/ready
       resources:
         requests:
           memory: 20Mi
