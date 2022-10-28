@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -159,8 +160,8 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 }
 
 // Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
-func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
-	r, err := c.getResources(resource, namespace)
+func (c Kubectl) Get(resource, namespace, labelSelector string, w io.Writer) error {
+	r, err := c.getResourcesMatching(resource, namespace, labelSelector)
 	if err != nil {
 		return err
 	}
@@ -175,6 +176,65 @@ func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
 	}
 
 	return printer.PrintObj(obj, w)
+}
+
+// Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+func (c Kubectl) GetElastic(resourceName, namespace, labelSelector string, w io.Writer) error {
+	var (
+		err error
+		r   *resource.Result
+	)
+
+	if labelSelector != "" {
+		typ, name, err := extractTypeName(labelSelector)
+		if err != nil {
+			return err
+		}
+		if typ != resourceName {
+			return nil
+		}
+		r, err = c.getResourcesWithFieldSelector(resourceName, namespace, fmt.Sprintf("metadata.name=%s", name))
+		if err != nil {
+			return err
+		}
+	} else {
+		r, err = c.getResources(resourceName, namespace)
+		if err != nil {
+			return err
+		}
+	}
+
+	printer, err := printers.NewTypeSetter(scheme.Scheme).WrapToPrinter(&printers.JSONPrinter{}, nil)
+	if err != nil {
+		return err
+	}
+
+	obj, err := r.Object()
+	if err != nil {
+		return err
+	}
+
+	return printer.PrintObj(obj, w)
+}
+
+func extractTypeName(selectors string) (string, string, error) {
+	var typ, name string
+	r := regexp.MustCompile(`^[a-z]*\.k8s\.elastic\.co\/(cluster\-){0,1}name$`)
+	for _, selector := range strings.Split(selectors, ",") {
+		kvs := strings.Split(selector, "=")
+		for i, v := range kvs {
+			if v == "common.k8s.elastic.co/type" {
+				typ = kvs[i+1]
+			}
+			if r.Match([]byte(v)) {
+				name = kvs[i+1]
+			}
+		}
+	}
+	if typ != "" && name != "" {
+		return typ, name, nil
+	}
+	return "", "", fmt.Errorf("type and/or name selector not found")
 }
 
 // getResources retrieves the K8s objects of type resource and returns a resource.Result.
@@ -202,6 +262,25 @@ func (c Kubectl) getResourcesMatching(resource string, namespace string, selecto
 		NamespaceParam(namespace).DefaultNamespace().AllNamespaces(false).
 		ResourceTypeOrNameArgs(true, resource).
 		LabelSelector(selector).
+		ContinueOnError().
+		Latest().
+		Flatten().
+		Do()
+
+	r.IgnoreErrors(apierrors.IsNotFound)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// getResourcesWithFieldSelector retrieves the K8s objects of type resource matching field selector and returns a resource.Result.
+func (c Kubectl) getResourcesWithFieldSelector(resource string, namespace string, fieldSelector string) (*resource.Result, error) {
+	r := c.factory.NewBuilder().
+		Unstructured().
+		NamespaceParam(namespace).DefaultNamespace().AllNamespaces(false).
+		ResourceTypeOrNameArgs(true, resource).
+		FieldSelectorParam(fieldSelector).
 		ContinueOnError().
 		Latest().
 		Flatten().
