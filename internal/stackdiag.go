@@ -159,7 +159,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 		return err
 	}
 
-	err = ds.kubectl.CoreV1().Pods(ds.ns).Delete(context.Background(), podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	err = ds.kubectl.CoreV1().Pods(ds.ns).Delete(context.Background(), podName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64(0)})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -335,7 +335,7 @@ func (ds *diagJobState) completeJob(job *diagJob) error {
 // terminateJob marks job as done and deletes diagnostic Pod.
 func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	job.MarkDone()
-	return ds.kubectl.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64Ptr(0)})
+	return ds.kubectl.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: pointer.Int64(0)})
 }
 
 // detectImageErrors tries to detect Image pull errors on the diagnostic container. Callers should then terminate the job
