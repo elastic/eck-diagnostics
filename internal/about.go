@@ -18,13 +18,17 @@ type DiagnosticsVersion struct {
 	BuildDate string
 }
 
-func about() DiagnosticsVersion {
+func Version() string {
 	v := buildVersion
 	if snapshotBuild == "true" {
 		v += "-SNAPSHOT"
 	}
+	return v
+}
+
+func about() DiagnosticsVersion {
 	return DiagnosticsVersion{
-		Version:   v,
+		Version:   Version(),
 		Hash:      buildHash,
 		BuildDate: buildDate,
 	}
