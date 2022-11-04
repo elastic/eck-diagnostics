@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/spf13/cobra v1.6.1
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.4.0
 	k8s.io/api v0.25.3
 	k8s.io/apimachinery v0.25.3
 	k8s.io/cli-runtime v0.25.3
