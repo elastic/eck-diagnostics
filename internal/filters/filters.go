@@ -1,3 +1,7 @@
+// Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+// or more contributor license agreements. Licensed under the Elastic License 2.0;
+// you may not use this file except in compliance with the Elastic License 2.0.
+
 package filters
 
 import (
@@ -64,36 +68,36 @@ func (f Filter) validate() (Filter, error) {
 	for _, filter := range f.source {
 		filterSlice := strings.Split(filter, "=")
 		if len(filterSlice) != 2 {
-			return f, fmt.Errorf("Invalid filter: %s", filter)
+			return f, fmt.Errorf("invalid filter: %s", filter)
 		}
 		k, v := filterSlice[0], filterSlice[1]
 		switch k {
 		case "type":
 			{
 				if typ != "" {
-					return f, fmt.Errorf("Only a single type filter is supported.")
+					return f, fmt.Errorf("only a single type filter is supported")
 				}
 				typ = v
 			}
 		case "name":
 			{
 				if name != "" {
-					return f, fmt.Errorf("Only a single name filter is supported.")
+					return f, fmt.Errorf("only a single name filter is supported")
 				}
 				name = v
 			}
 		default:
-			return f, fmt.Errorf("Invalid filter key: %s. Only 'type', and 'name' are supported.", k)
+			return f, fmt.Errorf("invalid filter key: %s. Only 'type', and 'name' are supported", k)
 		}
 	}
 	if typ == "" {
-		return f, fmt.Errorf("Invalid Filter: missing 'type'")
+		return f, fmt.Errorf("invalid Filter: missing 'type'")
 	}
 	if err := validateType(typ); err != nil {
 		return f, err
 	}
 	if name == "" {
-		return f, fmt.Errorf("Invalid Filter: missing 'name'")
+		return f, fmt.Errorf("invalid Filter: missing 'name'")
 	}
 	f.typ, f.name = typ, name
 	f.labelSelector = convertFilterToLabelSelector(f.typ, f.name)
