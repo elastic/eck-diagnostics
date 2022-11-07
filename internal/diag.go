@@ -165,7 +165,7 @@ LOOP:
 			"apmserver",
 		}))
 
-		// Filter is intentionally here, as Elastic labels
+		// Filter is intentionally empty here, as Elastic labels
 		// are not applied to these resources.
 		zipFile.Add(getResources(kubectl.Get, ns, filters.Filter{}, []string{
 			"persistentvolumes",
