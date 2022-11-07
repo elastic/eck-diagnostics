@@ -28,6 +28,13 @@ func Test_extractTypeName(t *testing.T) {
 			want1:     "myname",
 			wantErr:   false,
 		},
+		{
+			name:      "invalid selector should fail",
+			selectors: "invalid=selector",
+			want:      "",
+			want1:     "",
+			wantErr:   true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
