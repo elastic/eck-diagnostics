@@ -26,16 +26,18 @@ Usage:
   eck-diagnostics [flags]
 
 Flags:
-      --diagnostic-image string        Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:8.1.4")
-      --eck-version string             ECK version in use, will try to autodetect if not specified
-  -h, --help                           help for eck-diagnostics
-      --kubeconfig string              optional path to kube config, defaults to $HOME/.kube/config
-  -o, --operator-namespaces strings    Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
-      --output-directory string        Path where to output diagnostic results
-  -r, --resources-namespaces strings   Comma-separated list of namespace(s) in which resources are managed
-      --run-agent-diagnostics          Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
-      --run-stack-diagnostics          Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
-      --verbose                        Verbose mode
+      --diagnostic-image string              Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:8.4.0")
+      --eck-version string                   ECK version in use, will try to autodetect if not specified
+  -f, --filters strings                      Comma-separated list of filters in format "type=type, name=name" (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps])
+  -h, --help                                 help for eck-diagnostics
+      --kubeconfig string                    optional path to kube config, defaults to $HOME/.kube/config
+  -o, --operator-namespaces strings          Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
+      --output-directory string              Path where to output diagnostic results
+  -r, --resources-namespaces strings         Comma-separated list of namespace(s) in which resources are managed
+      --run-agent-diagnostics                Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
+      --run-stack-diagnostics                Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
+      --stack-diagnostics-timeout duration   Maximum time to wait for Elaticsearch and Kibana diagnostics to complete (default 5m0s)
+      --verbose                              Verbose mode
 ```
 
 ## Information collected by eck-diagnostics
@@ -83,3 +85,38 @@ The ECK related custom resources are included in those namespaces as well:
 
 ### Logs
 In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only logs from Pods managed by ECK are collected.
+
+## Filtering collected resources
+
+The resources in the specified namespaces that are collected by eck-diagnostics can be filtered with the `-f, --filters` flag.
+
+### Usage Example
+
+The following example will run the diagnostics for Elastic resources in namespace `a`, and will only return resources associated with an Elasticsearch cluster named `mycluster`.
+
+```shell
+eck-diagnostics -r a -f "type=elasticsearch,name=mycluster"
+```
+
+### Filtered resources
+
+Only a certain number of Kubernetes resources support filtering when filtering by an Elastic custom resource.  Along with the named Elastic custom resource type, the following resources will be returned that are associated:
+
+* ConfigMap
+* ControllerRevision
+* Deployment
+* DaemonSet
+* Endpoint
+* Pod
+* PersistentVolumeClaim
+* Replicaset
+* Service
+* StatefulSet
+
+The following resources are returned unfiltered:
+
+* Event
+* NetworkPolicy
+* PersistentVolume
+* ServiceAccount
+* Secret (metadata only)

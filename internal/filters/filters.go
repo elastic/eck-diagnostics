@@ -8,7 +8,8 @@ import (
 )
 
 var (
-	validTypes              = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
+	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
+	ValidTypes              = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
 	elasticTypeKey          = "common.k8s.elastic.co/type"
 	elasticsearchNameFormat = "%s.k8s.elastic.co/cluster-name"
 	elasticNameFormat       = "%s.k8s.elastic.co/name"
@@ -85,8 +86,8 @@ func (f Filter) validate() (Filter, error) {
 }
 
 func validateType(typ string) error {
-	if !slices.Contains(validTypes, typ) {
-		return fmt.Errorf("invalid type: %s, supported types: %v", typ, validTypes)
+	if !slices.Contains(ValidTypes, typ) {
+		return fmt.Errorf("invalid type: %s, supported types: %v", typ, ValidTypes)
 	}
 	return nil
 }

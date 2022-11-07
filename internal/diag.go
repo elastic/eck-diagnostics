@@ -113,7 +113,7 @@ func Run(params Params) error {
 
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
 
-		zipFile.Add(getResources(kubectl.Get, ns, params.Filter, []string{
+		zipFile.Add(getResources(kubectl.Get, ns, filters.Filter{}, []string{
 			"statefulsets",
 			"pods",
 			"services",
