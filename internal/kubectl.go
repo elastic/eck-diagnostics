@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/filters"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -160,8 +161,8 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 }
 
 // Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
-func (c Kubectl) Get(resource, namespace, labelSelector string, w io.Writer) error {
-	r, err := c.getResourcesMatching(resource, namespace, labelSelector)
+func (c Kubectl) Get(resource, namespace string, filter filters.Filter, w io.Writer) error {
+	r, err := c.getResourcesMatching(resource, namespace, filter.LabelSelector())
 	if err != nil {
 		return err
 	}
@@ -178,18 +179,17 @@ func (c Kubectl) Get(resource, namespace, labelSelector string, w io.Writer) err
 	return printer.PrintObj(obj, w)
 }
 
-// Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
-func (c Kubectl) GetElastic(resourceName, namespace, labelSelector string, w io.Writer) error {
+// GetElastic retrieves the Elastic K8s objects of type resourceName in namespace
+// using a field selector generated from the label selector and marshals them into the writer w.
+func (c Kubectl) GetElastic(resourceName, namespace string, filter filters.Filter, w io.Writer) error {
 	var (
 		err error
 		r   *resource.Result
 	)
 
-	if labelSelector != "" {
-		typ, name, err := extractTypeName(labelSelector)
-		if err != nil {
-			return err
-		}
+	if filter.LabelSelector() != "" {
+		typ := filter.Type()
+		name := filter.Name()
 		if typ != resourceName {
 			return nil
 		}

@@ -21,6 +21,13 @@ func Test_extractTypeName(t *testing.T) {
 			want1:     "myname",
 			wantErr:   false,
 		},
+		{
+			name:      "kibana type/name should extract properly",
+			selectors: "common.k8s.elastic.co/type=kibana,kibana.k8s.elastic.co/name=myname",
+			want:      "kibana",
+			want1:     "myname",
+			wantErr:   false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

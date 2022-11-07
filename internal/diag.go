@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/elastic/eck-diagnostics/internal/log"
 	"k8s.io/apimachinery/pkg/util/version"
 
@@ -38,7 +39,7 @@ type Params struct {
 	RunAgentDiagnostics     bool
 	Verbose                 bool
 	StackDiagnosticsTimeout time.Duration
-	LabelSelector           string
+	Filter                  filters.Filter
 }
 
 // AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
@@ -82,18 +83,20 @@ func Run(params Params) error {
 		return err
 	}
 
+	// Filter is intentionally empty in many of these, as Elastic labels
+	// are not applied to these resources.
 	zipFile.Add(map[string]func(io.Writer) error{
 		"version.json": func(writer io.Writer) error {
 			return kubectl.Version(writer)
 		},
 		"nodes.json": func(writer io.Writer) error {
-			return kubectl.Get("nodes", "", "", writer)
+			return kubectl.Get("nodes", "", filters.Filter{}, writer)
 		},
 		"podsecuritypolicies.json": func(writer io.Writer) error {
-			return kubectl.Get("podsecuritypolicies", "", "", writer)
+			return kubectl.Get("podsecuritypolicies", "", filters.Filter{}, writer)
 		},
 		"storageclasses.json": func(writer io.Writer) error {
-			return kubectl.Get("storageclasses", "", "", writer)
+			return kubectl.Get("storageclasses", "", filters.Filter{}, writer)
 		},
 		"clusterroles.txt": func(writer io.Writer) error {
 			return kubectl.Describe("clusterroles", "elastic", "", writer)
@@ -110,7 +113,7 @@ func Run(params Params) error {
 
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
 
-		zipFile.Add(getResources(kubectl.Get, ns, params.LabelSelector, []string{
+		zipFile.Add(getResources(kubectl.Get, ns, params.Filter, []string{
 			"statefulsets",
 			"pods",
 			"services",
@@ -143,7 +146,7 @@ LOOP:
 		default:
 		}
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		zipFile.Add(getResources(kubectl.Get, ns, params.LabelSelector, []string{
+		zipFile.Add(getResources(kubectl.Get, ns, params.Filter, []string{
 			"statefulsets",
 			"replicasets",
 			"deployments",
@@ -156,15 +159,15 @@ LOOP:
 			"controllerrevisions",
 		}))
 
-		zipFile.Add(getResources(kubectl.GetElastic, ns, params.LabelSelector, []string{
+		zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filter, []string{
 			"kibana",
 			"elasticsearch",
 			"apmserver",
 		}))
 
-		// labelSelector is intentionally empty, as Elastic labels
+		// Filter is intentionally here, as Elastic labels
 		// are not applied to these resources.
-		zipFile.Add(getResources(kubectl.Get, ns, "", []string{
+		zipFile.Add(getResources(kubectl.Get, ns, filters.Filter{}, []string{
 			"persistentvolumes",
 			"events",
 			"networkpolicies",
@@ -172,20 +175,20 @@ LOOP:
 		}))
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
-			zipFile.Add(getResources(kubectl.GetElastic, ns, params.LabelSelector, []string{
+			zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filter, []string{
 				"enterprisesearch",
 				"beat",
 			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
-			zipFile.Add(getResources(kubectl.GetElastic, ns, params.LabelSelector, []string{
+			zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filter, []string{
 				"agent",
 			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
-			zipFile.Add(getResources(kubectl.GetElastic, ns, params.LabelSelector, []string{
+			zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filter, []string{
 				"elasticmapsserver",
 			}))
 		}
@@ -251,12 +254,12 @@ func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, selector ...string
 
 // getResources produces a map of filenames to functions that will when invoked retrieve the resources identified by rs
 // and add write them to a writer passed to said functions.
-func getResources(f func(string, string, string, io.Writer) error, ns string, labelSelector string, rs []string) map[string]func(io.Writer) error {
+func getResources(f func(string, string, filters.Filter, io.Writer) error, ns string, filter filters.Filter, rs []string) map[string]func(io.Writer) error {
 	m := map[string]func(io.Writer) error{}
 	for _, r := range rs {
 		resource := r
 		m[archive.Path(ns, resource+".json")] = func(w io.Writer) error {
-			return f(resource, ns, labelSelector, w)
+			return f(resource, ns, filter, w)
 		}
 	}
 	return m
