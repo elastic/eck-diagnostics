@@ -90,6 +90,8 @@ In the operator namespaces (`-o, --operator-namespaces`) all logs are collected,
 
 The resources in the specified namespaces that are collected by eck-diagnostics can be filtered with the `-f, --filters` flag.
 
+*note* Only a single type+name filter is supported at this time.
+
 ### Usage Example
 
 The following example will run the diagnostics for Elastic resources in namespace `a`, and will only return resources associated with an Elasticsearch cluster named `mycluster`.
