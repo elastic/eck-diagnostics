@@ -15,6 +15,12 @@ var (
 	elasticNameFormat       = "%s.k8s.elastic.co/name"
 )
 
+// Filter is a type + name filter that translates into a labelSelector that is applied when querying for Kubernetes resources.
+// Both type and name are required at this time.
+//
+// examples supported:
+// name=mycluster, type=elasticsearch
+// name=mykb, type=kibana
 type Filter struct {
 	source        []string
 	typ           string
@@ -22,18 +28,27 @@ type Filter struct {
 	labelSelector string
 }
 
+// LabelSelector returns the formatted labelSelector for the filter.
 func (f Filter) LabelSelector() string {
 	return f.labelSelector
 }
 
+// Type returns the type of the Elastic resources to filter.
 func (f Filter) Type() string {
 	return f.typ
 }
 
+// Name returns the name of the Elastic resource to filter.
 func (f Filter) Name() string {
 	return f.name
 }
 
+// New returns a new filter, given a slice of key=value pairs,
+// runs validation on the given slice, and returns an error
+// if the given key=value pairs are invalid.
+//
+// source example:
+// []string{"name=mycluster", "type=elasticsearch"}
 func New(source []string) (Filter, error) {
 	filter := Filter{
 		source: source,
@@ -92,6 +107,15 @@ func validateType(typ string) error {
 	return nil
 }
 
+// convertFillterToLabelSelector will convert a given Elastic custom resource type,
+// and name into a valid Kubernetes labelSelector.  The internal switch logic
+// is required as Elasticsearch has a slighly different 'name' label format than other
+// Elastic custom resource types ('cluster-name' vs 'name'):
+//
+// example
+// "common.k8s.elastic.co/type=elasticsearch,elasticsearch.k8s.elastic.co/cluster-name=mycluster"
+// vs
+// "common.k8s.elastic.co/type=kibana,kibana.k8s.elastic.co/name=mykb"
 func convertFilterToLabelSelector(typ, name string) string {
 	var elasticfilter string
 	elasticfilter += elasticTypeKey + "=" + strings.ToLower(typ) + ","
