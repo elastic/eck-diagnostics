@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -162,7 +161,7 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 
 // Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
 func (c Kubectl) Get(resource, namespace string, filter filters.Filter, w io.Writer) error {
-	r, err := c.getResourcesMatching(resource, namespace, filter.LabelSelector())
+	r, err := c.getResourcesMatching(resource, namespace, filter.LabelSelector)
 	if err != nil {
 		return err
 	}
@@ -187,9 +186,9 @@ func (c Kubectl) GetElastic(resourceName, namespace string, filter filters.Filte
 		r   *resource.Result
 	)
 
-	if filter.LabelSelector() != "" {
-		typ := filter.Type()
-		name := filter.Name()
+	if filter.LabelSelector != "" {
+		typ := filter.Type
+		name := filter.Name
 		if typ != resourceName {
 			return nil
 		}
@@ -215,26 +214,6 @@ func (c Kubectl) GetElastic(resourceName, namespace string, filter filters.Filte
 	}
 
 	return printer.PrintObj(obj, w)
-}
-
-func extractTypeName(selectors string) (string, string, error) {
-	var typ, name string
-	r := regexp.MustCompile(`^[a-z]*\.k8s\.elastic\.co\/(cluster\-){0,1}name$`)
-	for _, selector := range strings.Split(selectors, ",") {
-		kvs := strings.Split(selector, "=")
-		for i, v := range kvs {
-			if v == "common.k8s.elastic.co/type" {
-				typ = kvs[i+1]
-			}
-			if r.Match([]byte(v)) {
-				name = kvs[i+1]
-			}
-		}
-	}
-	if typ != "" && name != "" {
-		return typ, name, nil
-	}
-	return "", "", fmt.Errorf("type and/or name selector not found")
 }
 
 // getResources retrieves the K8s objects of type resource and returns a resource.Result.

@@ -6,7 +6,7 @@ package filters
 
 import "testing"
 
-func TestValidate(t *testing.T) {
+func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string
 		filters []string
@@ -99,7 +99,7 @@ func TestValidate(t *testing.T) {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got.LabelSelector() != tt.want {
+			if got.LabelSelector != tt.want {
 				t.Errorf("New() = %v, want %v", got, tt.want)
 			}
 		})

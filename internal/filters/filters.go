@@ -23,28 +23,12 @@ var (
 // Both type and name are required at this time.
 //
 // examples supported:
-// name=mycluster, type=elasticsearch
-// name=mykb, type=kibana
+// name=mycluster,type=elasticsearch
+// name=mykb,type=kibana
 type Filter struct {
-	source        []string
-	typ           string
-	name          string
-	labelSelector string
-}
-
-// LabelSelector returns the formatted labelSelector for the filter.
-func (f Filter) LabelSelector() string {
-	return f.labelSelector
-}
-
-// Type returns the type of the Elastic resources to filter.
-func (f Filter) Type() string {
-	return f.typ
-}
-
-// Name returns the name of the Elastic resource to filter.
-func (f Filter) Name() string {
-	return f.name
+	Type          string
+	Name          string
+	LabelSelector string
 }
 
 // New returns a new filter, given a slice of key=value pairs,
@@ -54,81 +38,68 @@ func (f Filter) Name() string {
 // source example:
 // []string{"name=mycluster", "type=elasticsearch"}
 func New(source []string) (Filter, error) {
-	filter := Filter{
-		source: source,
-	}
-	return filter.validate()
+	return parse(source)
 }
 
-func (f Filter) validate() (Filter, error) {
-	if len(f.source) == 0 {
-		return f, nil
+func parse(source []string) (Filter, error) {
+	filter := Filter{}
+	if len(source) == 0 {
+		return filter, nil
 	}
 	var typ, name string
-	for _, filter := range f.source {
-		filterSlice := strings.Split(filter, "=")
+	for _, fltr := range source {
+		filterSlice := strings.Split(fltr, "=")
 		if len(filterSlice) != 2 {
-			return f, fmt.Errorf("invalid filter: %s", filter)
+			return filter, fmt.Errorf("invalid filter: %s", fltr)
 		}
 		k, v := filterSlice[0], filterSlice[1]
 		switch k {
 		case "type":
 			{
 				if typ != "" {
-					return f, fmt.Errorf("only a single type filter is supported")
+					return filter, fmt.Errorf("only a single type filter is supported")
 				}
 				typ = v
 			}
 		case "name":
 			{
 				if name != "" {
-					return f, fmt.Errorf("only a single name filter is supported")
+					return filter, fmt.Errorf("only a single name filter is supported")
 				}
 				name = v
 			}
 		default:
-			return f, fmt.Errorf("invalid filter key: %s. Only 'type', and 'name' are supported", k)
+			return filter, fmt.Errorf("invalid filter key: %s. Only 'type', and 'name' are supported", k)
 		}
 	}
 	if typ == "" {
-		return f, fmt.Errorf("invalid Filter: missing 'type'")
+		return filter, fmt.Errorf("invalid filter: missing 'type'")
 	}
 	if err := validateType(typ); err != nil {
-		return f, err
+		return filter, err
 	}
 	if name == "" {
-		return f, fmt.Errorf("invalid Filter: missing 'name'")
+		return filter, fmt.Errorf("invalid filter: missing 'name'")
 	}
-	f.typ, f.name = typ, name
-	f.labelSelector = convertFilterToLabelSelector(f.typ, f.name)
-	return f, nil
+	filter.Type, filter.Name = typ, name
+	filter.LabelSelector = convertFilterToLabelSelector(filter.Type, filter.Name)
+	return filter, nil
 }
 
 func validateType(typ string) error {
 	if !slices.Contains(ValidTypes, typ) {
-		return fmt.Errorf("invalid type: %s, supported types: %v", typ, ValidTypes)
+		return fmt.Errorf("invalid filter type: %s, supported types: %v", typ, ValidTypes)
 	}
 	return nil
 }
 
-// convertFillterToLabelSelector will convert a given Elastic custom resource type,
-// and name into a valid Kubernetes labelSelector.  The internal switch logic
-// is required as Elasticsearch has a slighly different 'name' label format than other
-// Elastic custom resource types ('cluster-name' vs 'name'):
-//
-// example
-// "common.k8s.elastic.co/type=elasticsearch,elasticsearch.k8s.elastic.co/cluster-name=mycluster"
-// vs
-// "common.k8s.elastic.co/type=kibana,kibana.k8s.elastic.co/name=mykb"
+// convertFilterToLabelSelector will convert a given Elastic custom resource type,
+// and name into a valid Kubernetes labelSelector.
 func convertFilterToLabelSelector(typ, name string) string {
-	var elasticfilter string
-	elasticfilter += elasticTypeKey + "=" + strings.ToLower(typ) + ","
-	switch typ {
-	case "elasticsearch":
-		elasticfilter += fmt.Sprintf(elasticsearchNameFormat, strings.ToLower(typ)) + "=" + name
-	default:
-		elasticfilter += fmt.Sprintf(elasticNameFormat, strings.ToLower(typ)) + "=" + name
+	format := "common.k8s.elastic.co/type=%s,%s.k8s.elastic.co/%s=%s"
+	nameAttr := name
+	if typ == "elasticsearch" {
+		nameAttr = "cluster-name"
 	}
-
-	return elasticfilter
+	return fmt.Sprintf(format, typ, typ, nameAttr, name)
 }
