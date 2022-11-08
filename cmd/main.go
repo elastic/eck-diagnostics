@@ -19,9 +19,10 @@ var (
 
 func main() {
 	cmd := &cobra.Command{
-		Use:   "eck-diagnostics",
-		Short: "ECK support diagnostics tool",
-		Long:  "Dump ECK and Kubernetes data for support and troubleshooting purposes.",
+		Use:     "eck-diagnostics",
+		Short:   "ECK support diagnostics tool",
+		Long:    "Dump ECK and Kubernetes data for support and troubleshooting purposes.",
+		Version: internal.Version(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return internal.Run(diagParams)
 		},
