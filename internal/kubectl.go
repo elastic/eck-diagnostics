@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
-	"github.com/elastic/eck-diagnostics/internal/filters"
+	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -160,8 +160,10 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 }
 
 // Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
-func (c Kubectl) Get(resource, namespace string, filter filters.Filter, w io.Writer) error {
-	r, err := c.getResourcesMatching(resource, namespace, filter.LabelSelector)
+// If filters is not empty, this will only return resources within the cluster that it's labels match
+// at least one of the filter's label selectors.
+func (c Kubectl) Get(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	r, err := c.getResources(resource, namespace)
 	if err != nil {
 		return err
 	}
@@ -175,18 +177,44 @@ func (c Kubectl) Get(resource, namespace string, filter filters.Filter, w io.Wri
 		return err
 	}
 
-	return printer.PrintObj(obj, w)
+	// If there are no filters, simply return the unfiltered resources.
+	if len(filters.ByType) == 0 {
+		return printer.PrintObj(obj, w)
+	}
+
+	// Otherwise, convert the returned resource to a List, and filter for any matching objects
+	// that have labels that match any of the given filter's label selector.
+	var list *corev1.List
+	list, ok := obj.(*corev1.List)
+	if !ok {
+		return fmt.Errorf("while converting returned object (%T) to list", obj)
+	}
+
+	filtered := corev1.List{}
+	for _, item := range list.Items {
+		labels, err := meta.NewAccessor().Labels(item.Object)
+		if err != nil {
+			return fmt.Errorf("while accessing labels for %s: %w", item.Object.GetObjectKind().GroupVersionKind().String(), err)
+		}
+		if filters.Matches(labels) {
+			filtered.Items = append(filtered.Items, item)
+		}
+	}
+
+	return printer.PrintObj(&filtered, w)
 }
 
 // GetElastic retrieves the Elastic K8s objects of type resourceName in namespace
 // using a field selector generated from the label selector and marshals them into the writer w.
-func (c Kubectl) GetElastic(resourceName, namespace string, filter filters.Filter, w io.Writer) error {
+func (c Kubectl) GetElastic(resourceName, namespace string, filters internal_filters.Filters, w io.Writer) error {
 	var (
 		err error
 		r   *resource.Result
 	)
 
-	if filter.LabelSelector != "" {
+	filter, ok := filters.ByType[resourceName]
+
+	if ok && filter.Selector != nil {
 		typ := filter.Type
 		name := filter.Name
 		if typ != resourceName {

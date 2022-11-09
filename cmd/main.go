@@ -35,7 +35,7 @@ func main() {
 	cmd.Flags().BoolVar(&diagParams.RunAgentDiagnostics, "run-agent-diagnostics", false, "Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive")
 	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
 	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
-	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=type,name=name" (Supported types %v)`, internal_filters.ValidTypes))
+	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
@@ -53,11 +53,11 @@ func main() {
 }
 
 func parseFilters(_ *cobra.Command, _ []string) error {
-	filter, err := internal_filters.New(filters)
+	filters, err := internal_filters.New(filters)
 	if err != nil {
 		return err
 	}
-	diagParams.Filter = filter
+	diagParams.Filters = filters
 	return nil
 }
 

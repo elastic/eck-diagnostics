@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/utils/strings/slices"
 )
 
@@ -19,71 +21,75 @@ var (
 	elasticNameFormat       = "%s.k8s.elastic.co/name"
 )
 
-// Filter is a type + name filter that translates into a labelSelector that is applied when querying for Kubernetes resources.
-// Both type and name are required at this time.
-//
-// examples supported:
-// name=mycluster,type=elasticsearch
-// name=mykb,type=kibana
-type Filter struct {
-	Type          string
-	Name          string
-	LabelSelector string
+// Filters contains a Filter map for each Elastic type given in the filter "source".
+type Filters struct {
+	ByType map[string]Filter
 }
 
-// New returns a new filter, given a slice of key=value pairs,
-// runs validation on the given slice, and returns an error
+// Matches will determine if the given labels matches any of the
+// Filter's label selectors.
+func (f Filters) Matches(lbls map[string]string) bool {
+	for _, filter := range f.ByType {
+		if filter.Selector.Matches(labels.Set(lbls)) {
+			return true
+		}
+	}
+	return false
+}
+
+// Filter contains a type + name (type = elasticsearch, name = my-cluster)
+// and a label selector to easily determine if any queryied resource's labels match
+// a given filter.
+type Filter struct {
+	Type     string
+	Name     string
+	Selector labels.Selector
+}
+
+// New returns a new set of filters, given a slice of key=value pairs,
+// parses and validates the given filters, and returns an error
 // if the given key=value pairs are invalid.
 //
 // source example:
-// []string{"name=mycluster", "type=elasticsearch"}
-func New(source []string) (Filter, error) {
+// []string{"elasticsearch=my-cluster", "kibana=my-kb"}
+func New(source []string) (Filters, error) {
 	return parse(source)
 }
 
-func parse(source []string) (Filter, error) {
-	filter := Filter{}
+// parse will validate the given source filters, and for each
+// filter type, will create a Filter with a label selector,
+// returning the set of Filters, and any errors encountered.
+func parse(source []string) (Filters, error) {
+	filters := Filters{
+		ByType: map[string]Filter{},
+	}
 	if len(source) == 0 {
-		return filter, nil
+		return filters, nil
 	}
 	var typ, name string
 	for _, fltr := range source {
 		filterSlice := strings.Split(fltr, "=")
 		if len(filterSlice) != 2 {
-			return filter, fmt.Errorf("invalid filter: %s", fltr)
+			return filters, fmt.Errorf("invalid filter: %s", fltr)
 		}
-		k, v := filterSlice[0], filterSlice[1]
-		switch k {
-		case "type":
-			{
-				if typ != "" {
-					return filter, fmt.Errorf("only a single type filter is supported")
-				}
-				typ = v
-			}
-		case "name":
-			{
-				if name != "" {
-					return filter, fmt.Errorf("only a single name filter is supported")
-				}
-				name = v
-			}
-		default:
-			return filter, fmt.Errorf("invalid filter key: %s. Only 'type', and 'name' are supported", k)
+		typ, name = filterSlice[0], filterSlice[1]
+		if err := validateType(typ); err != nil {
+			return filters, err
+		}
+		if _, ok := filters.ByType[typ]; ok {
+			return filters, fmt.Errorf("invalid filter: %s: multiple filters for the same type (%s) are not supported", fltr, typ)
+		}
+		selector, err := processSelector(typ, name)
+		if err != nil {
+			return filters, fmt.Errorf("while processing label selector: %w", err)
+		}
+		filters.ByType[typ] = Filter{
+			Name:     name,
+			Type:     typ,
+			Selector: selector,
 		}
 	}
-	if typ == "" {
-		return filter, fmt.Errorf("invalid filter: missing 'type'")
-	}
-	if err := validateType(typ); err != nil {
-		return filter, err
-	}
-	if name == "" {
-		return filter, fmt.Errorf("invalid filter: missing 'name'")
-	}
-	filter.Type, filter.Name = typ, name
-	filter.LabelSelector = convertFilterToLabelSelector(filter.Type, filter.Name)
-	return filter, nil
+	return filters, nil
 }
 
 func validateType(typ string) error {
@@ -93,13 +99,35 @@ func validateType(typ string) error {
 	return nil
 }
 
-// convertFilterToLabelSelector will convert a given Elastic custom resource type,
-// and name into a valid Kubernetes labelSelector.
-func convertFilterToLabelSelector(typ, name string) string {
-	format := "common.k8s.elastic.co/type=%s,%s.k8s.elastic.co/%s=%s"
-	nameAttr := name
+// processSelector will create a label set for a given type+name pair,
+// create a selector from that label set, and add label requirements
+// to the selector for each key/value in the label set, returning the selector
+// and any errors in processing.
+//
+// Having a labels.Selector on the Filter allows an easy match operation:
+//
+//	Selector.Match(LabelSet)
+//
+// against any runtime object's labels.
+func processSelector(typ, name string) (labels.Selector, error) {
+	nameAttr := "name"
 	if typ == "elasticsearch" {
 		nameAttr = "cluster-name"
 	}
-	return fmt.Sprintf(format, typ, typ, nameAttr, name)
+	set := labels.Set{
+		"common.k8s.elastic.co/type":                       typ,
+		fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
+	}
+	s := labels.SelectorFromSet(set)
+	for sk, v := range set {
+		req, err := labels.NewRequirement(sk, selection.Equals, []string{v})
+		if err != nil {
+			return nil, err
+		}
+		if req == nil {
+			return nil, fmt.Errorf("invalid requirement")
+		}
+		s.Add(*req)
+	}
+	return s, nil
 }

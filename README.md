@@ -28,7 +28,7 @@ Usage:
 Flags:
       --diagnostic-image string              Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:8.4.0")
       --eck-version string                   ECK version in use, will try to autodetect if not specified
-  -f, --filters strings                      Comma-separated list of filters in format "type=type, name=name" (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps])
+  -f, --filters strings                      Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps])
   -h, --help                                 help for eck-diagnostics
       --kubeconfig string                    optional path to kube config, defaults to $HOME/.kube/config
   -o, --operator-namespaces strings          Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
@@ -90,14 +90,12 @@ In the operator namespaces (`-o, --operator-namespaces`) all logs are collected,
 
 The resources in the specified namespaces that are collected by eck-diagnostics can be filtered with the `-f, --filters` flag.
 
-*note* Only a single type+name filter is supported at this time.
-
 ### Usage Example
 
-The following example will run the diagnostics for Elastic resources in namespace `a`, and will only return resources associated with an Elasticsearch cluster named `mycluster`.
+The following example will run the diagnostics for Elastic resources in namespace `a`, and will only return resources associated with either an Elasticsearch cluster named `mycluster` or a Kibana instance named `my-kb`.
 
 ```shell
-eck-diagnostics -r a -f "type=elasticsearch,name=mycluster"
+eck-diagnostics -r a -f "elasticsearch=mycluster" -f "kibana=my-kb"
 ```
 
 ### Filtered resources
