@@ -15,10 +15,7 @@ import (
 
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
-	ValidTypes              = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
-	elasticTypeKey          = "common.k8s.elastic.co/type"
-	elasticsearchNameFormat = "%s.k8s.elastic.co/cluster-name"
-	elasticNameFormat       = "%s.k8s.elastic.co/name"
+	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
 )
 
 // Filters contains a Filter map for each Elastic type given in the filter "source".
