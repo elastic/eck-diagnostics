@@ -83,7 +83,7 @@ func Run(params Params) error {
 		return err
 	}
 
-	// Filter is intentionally empty in many of these, as Elastic labels
+	// Filters is intentionally empty in many of these, as Elastic labels
 	// are not applied to these resources.
 	zipFile.Add(map[string]func(io.Writer) error{
 		"version.json": func(writer io.Writer) error {
@@ -165,7 +165,7 @@ LOOP:
 			"apmserver",
 		}))
 
-		// Filter is intentionally empty here, as Elastic labels
+		// Filters is intentionally empty here, as Elastic labels
 		// are not applied to these resources.
 		zipFile.Add(getResources(kubectl.Get, ns, filters.Filters{}, []string{
 			"persistentvolumes",
