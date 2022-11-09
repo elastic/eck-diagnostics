@@ -26,6 +26,7 @@ func main() {
 		Short:   "ECK support diagnostics tool",
 		Long:    "Dump ECK and Kubernetes data for support and troubleshooting purposes.",
 		PreRunE: parseFilters,
+		Version: internal.Version(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return internal.Run(diagParams)
 		},
