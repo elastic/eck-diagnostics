@@ -202,70 +202,56 @@ func TestFilters_Matches(t *testing.T) {
 			},
 		},
 	}
-	type fields struct {
-		ByType map[string]Filter
-	}
-	type args struct {
-		lbls map[string]string
-	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   bool
+		name      string
+		labels    map[string]string
+		filterMap map[string]Filter
+		want      bool
 	}{
 		{
 			name: "default elasticsearch labels should match elasticsearch filter selector",
-			args: args{
-				lbls: map[string]string{
-					"common.k8s.elastic.co/type":                              "elasticsearch",
-					"controller-revision-hash":                                "my-cluster-es-default-64ffc4847c",
-					"elasticsearch.k8s.elastic.co/cluster-name":               "my-cluster",
-					"elasticsearch.k8s.elastic.co/http-scheme":                "https",
-					"elasticsearch.k8s.elastic.co/node-data":                  "true",
-					"elasticsearch.k8s.elastic.co/node-data_cold":             "true",
-					"elasticsearch.k8s.elastic.co/node-data_content":          "true",
-					"elasticsearch.k8s.elastic.co/node-data_frozen":           "true",
-					"elasticsearch.k8s.elastic.co/node-data_hot":              "true",
-					"elasticsearch.k8s.elastic.co/node-data_warm":             "true",
-					"elasticsearch.k8s.elastic.co/node-ingest":                "true",
-					"elasticsearch.k8s.elastic.co/node-master":                "true",
-					"elasticsearch.k8s.elastic.co/node-ml":                    "true",
-					"elasticsearch.k8s.elastic.co/node-remote_cluster_client": "true",
-					"elasticsearch.k8s.elastic.co/node-transform":             "true",
-					"elasticsearch.k8s.elastic.co/node-voting_only":           "false",
-					"elasticsearch.k8s.elastic.co/statefulset-name":           "my-cluster-es-default",
-					"elasticsearch.k8s.elastic.co/version":                    "8.2.3",
-					"statefulset.kubernetes.io/pod-name":                      "my-cluster-es-default-0",
-				},
+			labels: map[string]string{
+				"common.k8s.elastic.co/type":                              "elasticsearch",
+				"controller-revision-hash":                                "my-cluster-es-default-64ffc4847c",
+				"elasticsearch.k8s.elastic.co/cluster-name":               "my-cluster",
+				"elasticsearch.k8s.elastic.co/http-scheme":                "https",
+				"elasticsearch.k8s.elastic.co/node-data":                  "true",
+				"elasticsearch.k8s.elastic.co/node-data_cold":             "true",
+				"elasticsearch.k8s.elastic.co/node-data_content":          "true",
+				"elasticsearch.k8s.elastic.co/node-data_frozen":           "true",
+				"elasticsearch.k8s.elastic.co/node-data_hot":              "true",
+				"elasticsearch.k8s.elastic.co/node-data_warm":             "true",
+				"elasticsearch.k8s.elastic.co/node-ingest":                "true",
+				"elasticsearch.k8s.elastic.co/node-master":                "true",
+				"elasticsearch.k8s.elastic.co/node-ml":                    "true",
+				"elasticsearch.k8s.elastic.co/node-remote_cluster_client": "true",
+				"elasticsearch.k8s.elastic.co/node-transform":             "true",
+				"elasticsearch.k8s.elastic.co/node-voting_only":           "false",
+				"elasticsearch.k8s.elastic.co/statefulset-name":           "my-cluster-es-default",
+				"elasticsearch.k8s.elastic.co/version":                    "8.2.3",
+				"statefulset.kubernetes.io/pod-name":                      "my-cluster-es-default-0",
 			},
-			fields: fields{
-				ByType: defaultFilters.ByType,
-			},
-			want: true,
+			filterMap: defaultFilters.ByType,
+			want:      true,
 		},
 		{
 			name: "agent pod labels should not match elasticsearch filter selector",
-			args: args{
-				lbls: map[string]string{
-					"agent.k8s.elastic.co/name":    "fleet-server",
-					"agent.k8s.elastic.co/version": "8.2.3",
-					"common.k8s.elastic.co/type":   "agent",
-					"pod-template-hash":            "7cbfdc4d78",
-				},
+			labels: map[string]string{
+				"agent.k8s.elastic.co/name":    "fleet-server",
+				"agent.k8s.elastic.co/version": "8.2.3",
+				"common.k8s.elastic.co/type":   "agent",
+				"pod-template-hash":            "7cbfdc4d78",
 			},
-			fields: fields{
-				ByType: defaultFilters.ByType,
-			},
-			want: false,
+			filterMap: defaultFilters.ByType,
+			want:      false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := Filters{
-				ByType: tt.fields.ByType,
+				ByType: tt.filterMap,
 			}
-			if got := f.Matches(tt.args.lbls); got != tt.want {
+			if got := f.Matches(tt.labels); got != tt.want {
 				t.Errorf("Filters.Matches() = %v, want %v", got, tt.want)
 			}
 		})
