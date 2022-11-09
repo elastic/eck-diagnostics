@@ -38,7 +38,7 @@ func (f Filters) Matches(lbls map[string]string) bool {
 }
 
 // Filter contains a type + name (type = elasticsearch, name = my-cluster)
-// and a label selector to easily determine if any queryied resource's labels match
+// and a label selector to easily determine if any queried resource's labels match
 // a given filter.
 type Filter struct {
 	Type     string
