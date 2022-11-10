@@ -287,25 +287,6 @@ func (c Kubectl) getResourcesMatching(resource string, namespace string, selecto
 	return r, nil
 }
 
-// getResourcesWithFieldSelector retrieves the K8s objects of type resource matching field selector and returns a resource.Result.
-func (c Kubectl) getResourcesWithFieldSelector(resource string, namespace string, fieldSelector string) (*resource.Result, error) {
-	r := c.factory.NewBuilder().
-		Unstructured().
-		NamespaceParam(namespace).DefaultNamespace().AllNamespaces(false).
-		ResourceTypeOrNameArgs(true, resource).
-		FieldSelectorParam(fieldSelector).
-		ContinueOnError().
-		Latest().
-		Flatten().
-		Do()
-
-	r.IgnoreErrors(apierrors.IsNotFound)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
 // GetMeta retrieves the metadata for the K8s objects of type resource and marshals them into writer w.
 // It tries to elide sensitive data like secret contents or kubectl last-applied configuration annotations.
 func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
