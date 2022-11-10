@@ -17,6 +17,7 @@ import (
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"github.com/elastic/eck-diagnostics/internal/extraction"
+	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/ghodss/yaml"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -351,14 +352,14 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}) {
+func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}, filters internal_filters.Filters) {
 	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
 
-	if err := scheduleJobs(k, ns, zipFile.AddError, state, elasticsearchJob); err != nil {
+	if err := scheduleJobs(k, ns, zipFile.AddError, state, elasticsearchJob, filters); err != nil {
 		zipFile.AddError(err)
 		return
 	}
-	if err := scheduleJobs(k, ns, zipFile.AddError, state, kibanaJob); err != nil {
+	if err := scheduleJobs(k, ns, zipFile.AddError, state, kibanaJob, filters); err != nil {
 		zipFile.AddError(err)
 		return
 	}
@@ -370,7 +371,7 @@ func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 }
 
 // scheduleJobs lists all resources of type typ and schedules a diagnostic job for each of them
-func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string) error {
+func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internal_filters.Filters) error {
 	resources, err := k.getResources(typ, ns)
 	if err != nil {
 		return err // not recoverable
@@ -393,6 +394,10 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			return nil
 		}
 		tls := !(found && disabled)
+
+		if !filters.Empty() && !filters.Contains(resourceName, typ) {
+			return nil
+		}
 
 		esName := resourceName
 		if typ != "elasticsearch" {

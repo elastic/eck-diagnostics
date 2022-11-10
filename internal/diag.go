@@ -130,7 +130,9 @@ func Run(params Params) error {
 			},
 		})
 
-		if err := kubectl.Logs(ns, "", zipFile.Create); err != nil {
+		// Filters is intentionally empty here, as label filtering doesn't apply to
+		// pods in the operator namespace.
+		if err := kubectl.Logs(ns, "", filters.Filters{}, zipFile.Create); err != nil {
 			zipFile.AddError(err)
 		}
 	}
@@ -199,7 +201,7 @@ LOOP:
 			},
 		})
 
-		getLogs(kubectl, zipFile, ns,
+		getLogs(kubectl, zipFile, ns, params.Filters,
 			"common.k8s.elastic.co/type=elasticsearch",
 			"common.k8s.elastic.co/type=kibana",
 			"common.k8s.elastic.co/type=apm-server",
@@ -211,11 +213,11 @@ LOOP:
 		)
 
 		if params.RunStackDiagnostics {
-			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, params.StackDiagnosticsTimeout, stopCh)
+			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, params.StackDiagnosticsTimeout, stopCh, params.Filters)
 		}
 
 		if params.RunAgentDiagnostics {
-			runAgentDiagnostics(kubectl, ns, zipFile, params.Verbose, stopCh)
+			runAgentDiagnostics(kubectl, ns, zipFile, params.Verbose, stopCh, params.Filters)
 		}
 	}
 
@@ -244,9 +246,9 @@ func addDiagnosticLogToArchive(zipFile *archive.ZipFile, logContents *bytes.Buff
 }
 
 // getLogs extracts logs from all Pods that match the given selectors in the namespace ns and adds them to zipFile.
-func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, selector ...string) {
+func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, filters filters.Filters, selector ...string) {
 	for _, s := range selector {
-		if err := k.Logs(ns, s, zipFile.Create); err != nil {
+		if err := k.Logs(ns, s, filters, zipFile.Create); err != nil {
 			zipFile.AddError(err)
 		}
 	}

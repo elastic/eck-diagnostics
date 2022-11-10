@@ -20,14 +20,39 @@ var (
 
 // Filters contains a Filter map for each Elastic type given in the filter "source".
 type Filters struct {
-	ByType map[string]Filter
+	ByType map[string][]Filter
+}
+
+// Empty simply returns if there are no defined filters.
+func (f Filters) Empty() bool {
+	return len(f.ByType) == 0
 }
 
 // Matches will determine if the given labels matches any of the
 // Filter's label selectors.
 func (f Filters) Matches(lbls map[string]string) bool {
-	for _, filter := range f.ByType {
-		if filter.Selector.Matches(labels.Set(lbls)) {
+	for _, fs := range f.ByType {
+		for _, filter := range fs {
+			if filter.Selector.Matches(labels.Set(lbls)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Contains will check if any of the filters of named type 'typ'
+// contain a filter for an object named 'name'.
+func (f Filters) Contains(name, typ string) bool {
+	var (
+		ok          bool
+		typeFilters []Filter
+	)
+	if typeFilters, ok = f.ByType[typ]; !ok {
+		return false
+	}
+	for _, filter := range typeFilters {
+		if filter.Name == name {
 			return true
 		}
 	}
@@ -58,7 +83,7 @@ func New(source []string) (Filters, error) {
 // returning the set of Filters, and any errors encountered.
 func parse(source []string) (Filters, error) {
 	filters := Filters{
-		ByType: map[string]Filter{},
+		ByType: map[string][]Filter{},
 	}
 	if len(source) == 0 {
 		return filters, nil
@@ -80,11 +105,11 @@ func parse(source []string) (Filters, error) {
 		if err != nil {
 			return filters, fmt.Errorf("while processing label selector: %w", err)
 		}
-		filters.ByType[typ] = Filter{
+		filters.ByType[typ] = append(filters.ByType[typ], Filter{
 			Name:     name,
 			Type:     typ,
 			Selector: selector,
-		}
+		})
 	}
 	return filters, nil
 }

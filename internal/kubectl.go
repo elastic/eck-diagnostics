@@ -178,7 +178,7 @@ func (c Kubectl) Get(resource, namespace string, filters internal_filters.Filter
 	}
 
 	// If there are no filters, simply return the unfiltered resources.
-	if len(filters.ByType) == 0 {
+	if filters.Empty() {
 		return printer.PrintObj(obj, w)
 	}
 
@@ -204,31 +204,12 @@ func (c Kubectl) Get(resource, namespace string, filters internal_filters.Filter
 	return printer.PrintObj(&filtered, w)
 }
 
-// GetElastic retrieves the Elastic K8s objects of type resourceName in namespace
-// using a field selector generated from the label selector and marshals them into the writer w.
-func (c Kubectl) GetElastic(resourceName, namespace string, filters internal_filters.Filters, w io.Writer) error {
-	var (
-		err error
-		r   *resource.Result
-	)
-
-	filter, ok := filters.ByType[resourceName]
-
-	if ok && filter.Selector != nil {
-		typ := filter.Type
-		name := filter.Name
-		if typ != resourceName {
-			return nil
-		}
-		r, err = c.getResourcesWithFieldSelector(resourceName, namespace, fmt.Sprintf("metadata.name=%s", name))
-		if err != nil {
-			return err
-		}
-	} else {
-		r, err = c.getResources(resourceName, namespace)
-		if err != nil {
-			return err
-		}
+// GetElastic retrieves the Elastic K8s objects of type resource in namespace,
+// filters by name, and marshals them into the writer w.
+func (c Kubectl) GetElastic(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	r, err := c.getResources(resource, namespace)
+	if err != nil {
+		return err
 	}
 
 	printer, err := printers.NewTypeSetter(scheme.Scheme).WrapToPrinter(&printers.JSONPrinter{}, nil)
@@ -241,7 +222,32 @@ func (c Kubectl) GetElastic(resourceName, namespace string, filters internal_fil
 		return err
 	}
 
-	return printer.PrintObj(obj, w)
+	// If there are no filters, simply return the unfiltered resources.
+	if filters.Empty() {
+		return printer.PrintObj(obj, w)
+	}
+
+	// Otherwise, convert the returned resource to a List, and filter for any matching objects
+	// that have names that match any of the given type filter's name.
+	var list *corev1.List
+	list, ok := obj.(*corev1.List)
+	if !ok {
+		return fmt.Errorf("while converting returned object (%T) to list", obj)
+	}
+
+	filtered := corev1.List{}
+	for _, item := range list.Items {
+		name, err := meta.NewAccessor().Name(item.Object)
+		if err != nil {
+			return fmt.Errorf("while accessing name for %s: %w", item.Object.GetObjectKind().GroupVersionKind().String(), err)
+		}
+
+		if filters.Contains(name, resource) {
+			filtered.Items = append(filtered.Items, item)
+		}
+	}
+
+	return printer.PrintObj(&filtered, w)
 }
 
 // getResources retrieves the K8s objects of type resource and returns a resource.Result.
@@ -393,7 +399,7 @@ func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error
 }
 
 // Logs mimics "kubectl logs -l selector" and writes the result to writers produced by out when given a filename.
-func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Writer, error)) error {
+func (c Kubectl) Logs(namespace string, selector string, filters internal_filters.Filters, out func(string) (io.Writer, error)) error {
 	builder := c.factory.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
 		NamespaceParam(namespace).
@@ -414,11 +420,19 @@ func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Wr
 		switch t := obj.(type) {
 		case *corev1.PodList:
 			for _, p := range t.Items {
+				// ignore pod when filters are being applied, and the pod doesn't match the filters.
+				if !filters.Empty() && !filters.Matches(p.Labels) {
+					continue
+				}
 				if err := c.requestLogs(p, out); err != nil {
 					return err
 				}
 			}
 		case *corev1.Pod:
+			// ignore pod when filters are being applied, and the pod doesn't match the filters.
+			if !filters.Empty() && !filters.Matches(t.Labels) {
+				continue
+			}
 			if err := c.requestLogs(*t, out); err != nil {
 				return err
 			}

@@ -24,139 +24,139 @@ func TestNew(t *testing.T) {
 		{
 			name:    "empty/no filter is valid",
 			filters: []string{},
-			want:    Filters{ByType: map[string]Filter{}},
+			want:    Filters{ByType: map[string][]Filter{}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and agent type is valid",
 			filters: []string{"agent=myagent"},
-			want: Filters{ByType: map[string]Filter{
-				"agent": {
+			want: Filters{ByType: map[string][]Filter{
+				"agent": {{
 					Type: "agent",
 					Name: "myagent",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "agent")).
 						Add(mustParseRequirement("agent.k8s.elastic.co/name", "myagent")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and apm type is valid",
 			filters: []string{"apm=myapm"},
-			want: Filters{ByType: map[string]Filter{
-				"apm": {
+			want: Filters{ByType: map[string][]Filter{
+				"apm": {{
 					Type: "apm",
 					Name: "myapm",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "apm")).
 						Add(mustParseRequirement("apm.k8s.elastic.co/name", "myapm")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and beat type is valid",
 			filters: []string{"beat=mybeat"},
-			want: Filters{ByType: map[string]Filter{
-				"beat": {
+			want: Filters{ByType: map[string][]Filter{
+				"beat": {{
 					Type: "beat",
 					Name: "mybeat",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "beat")).
 						Add(mustParseRequirement("beat.k8s.elastic.co/name", "mybeat")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and elasticsearch type is valid",
 			filters: []string{"elasticsearch=mycluster"},
-			want: Filters{ByType: map[string]Filter{
-				"elasticsearch": {
+			want: Filters{ByType: map[string][]Filter{
+				"elasticsearch": {{
 					Type: "elasticsearch",
 					Name: "mycluster",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "elasticsearch")).
 						Add(mustParseRequirement("elasticsearch.k8s.elastic.co/cluster-name", "mycluster")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and enterprisesearch type is valid",
 			filters: []string{"enterprisesearch=mycluster"},
-			want: Filters{ByType: map[string]Filter{
-				"enterprisesearch": {
+			want: Filters{ByType: map[string][]Filter{
+				"enterprisesearch": {{
 					Type: "enterprisesearch",
 					Name: "mycluster",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "enterprisesearch")).
 						Add(mustParseRequirement("enterprisesearch.k8s.elastic.co/name", "mycluster")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and kibana type is valid",
 			filters: []string{"kibana=mykb"},
-			want: Filters{ByType: map[string]Filter{
-				"kibana": {
+			want: Filters{ByType: map[string][]Filter{
+				"kibana": {{
 					Type: "kibana",
 					Name: "mykb",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "kibana")).
 						Add(mustParseRequirement("kibana.k8s.elastic.co/name", "mykb")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and maps type is valid",
 			filters: []string{"maps=mymaps"},
-			want: Filters{ByType: map[string]Filter{
-				"maps": {
+			want: Filters{ByType: map[string][]Filter{
+				"maps": {{
 					Type: "maps",
 					Name: "mymaps",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "maps")).
 						Add(mustParseRequirement("maps.k8s.elastic.co/name", "mymaps")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "multiple valid filters return correctly",
 			filters: []string{"elasticsearch=mycluster", "kibana=my-kb", "agent=my-agent"},
-			want: Filters{ByType: map[string]Filter{
-				"agent": {
+			want: Filters{ByType: map[string][]Filter{
+				"agent": {{
 					Type: "agent",
 					Name: "my-agent",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "agent")).
 						Add(mustParseRequirement("agent.k8s.elastic.co/name", "my-agent")),
-				},
-				"elasticsearch": {
+				}},
+				"elasticsearch": {{
 					Type: "elasticsearch",
 					Name: "mycluster",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "elasticsearch")).
 						Add(mustParseRequirement("elasticsearch.k8s.elastic.co/cluster-name", "mycluster")),
-				},
-				"kibana": {
+				}},
+				"kibana": {{
 					Type: "kibana",
 					Name: "my-kb",
 					Selector: labels.NewSelector().
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "kibana")).
 						Add(mustParseRequirement("kibana.k8s.elastic.co/name", "my-kb")),
-				},
+				}},
 			}},
 			wantErr: false,
 		},
 		{
 			name:    "invalid type is invalid",
 			filters: []string{"type=invalid"},
-			want:    Filters{ByType: map[string]Filter{}},
+			want:    Filters{ByType: map[string][]Filter{}},
 			wantErr: true,
 		},
 	}
@@ -194,18 +194,18 @@ func TestFilters_Matches(t *testing.T) {
 		selector.Add(*req)
 	}
 	defaultFilters := Filters{
-		ByType: map[string]Filter{
-			"elasticsearch": {
+		ByType: map[string][]Filter{
+			"elasticsearch": {{
 				Type:     "elasticsearch",
 				Name:     "my-cluster",
 				Selector: selector,
-			},
+			}},
 		},
 	}
 	tests := []struct {
 		name      string
 		labels    map[string]string
-		filterMap map[string]Filter
+		filterMap map[string][]Filter
 		want      bool
 	}{
 		{
