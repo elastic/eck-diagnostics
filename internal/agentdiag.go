@@ -56,7 +56,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 			return nil
 		}
 
-		if !filters.Empty() && !filters.Matches(labels) {
+		if !filters.Matches(labels) {
 			return nil
 		}
 

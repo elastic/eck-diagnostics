@@ -20,18 +20,22 @@ var (
 
 // Filters contains a Filter map for each Elastic type given in the filter "source".
 type Filters struct {
-	ByType map[string][]Filter
+	byType map[string][]Filter
 }
 
-// Empty simply returns if there are no defined filters.
+// Empty returns if there are no defined filters.
 func (f Filters) Empty() bool {
-	return len(f.ByType) == 0
+	return len(f.byType) == 0
 }
 
 // Matches will determine if the given labels matches any of the
 // Filter's label selectors.
 func (f Filters) Matches(lbls map[string]string) bool {
-	for _, fs := range f.ByType {
+	// empty set of filters always matches.
+	if f.Empty() {
+		return true
+	}
+	for _, fs := range f.byType {
 		for _, filter := range fs {
 			if filter.Selector.Matches(labels.Set(lbls)) {
 				return true
@@ -48,7 +52,7 @@ func (f Filters) Contains(name, typ string) bool {
 		ok          bool
 		typeFilters []Filter
 	)
-	if typeFilters, ok = f.ByType[typ]; !ok {
+	if typeFilters, ok = f.byType[typ]; !ok {
 		return false
 	}
 	for _, filter := range typeFilters {
@@ -83,7 +87,7 @@ func New(source []string) (Filters, error) {
 // returning the set of Filters, and any errors encountered.
 func parse(source []string) (Filters, error) {
 	filters := Filters{
-		ByType: map[string][]Filter{},
+		byType: map[string][]Filter{},
 	}
 	if len(source) == 0 {
 		return filters, nil
@@ -98,14 +102,14 @@ func parse(source []string) (Filters, error) {
 		if err := validateType(typ); err != nil {
 			return filters, err
 		}
-		if _, ok := filters.ByType[typ]; ok {
+		if _, ok := filters.byType[typ]; ok {
 			return filters, fmt.Errorf("invalid filter: %s: multiple filters for the same type (%s) are not supported", fltr, typ)
 		}
 		selector, err := processSelector(typ, name)
 		if err != nil {
 			return filters, fmt.Errorf("while processing label selector: %w", err)
 		}
-		filters.ByType[typ] = append(filters.ByType[typ], Filter{
+		filters.byType[typ] = append(filters.byType[typ], Filter{
 			Name:     name,
 			Type:     typ,
 			Selector: selector,
@@ -140,7 +144,7 @@ func processSelector(typ, name string) (labels.Selector, error) {
 		"common.k8s.elastic.co/type":                       typ,
 		fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
 	}
-	s := labels.SelectorFromSet(set)
+	s := labels.SelectorFromValidatedSet(set)
 	for sk, v := range set {
 		req, err := labels.NewRequirement(sk, selection.Equals, []string{v})
 		if err != nil {

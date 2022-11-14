@@ -24,13 +24,13 @@ func TestNew(t *testing.T) {
 		{
 			name:    "empty/no filter is valid",
 			filters: []string{},
-			want:    Filters{ByType: map[string][]Filter{}},
+			want:    Filters{byType: map[string][]Filter{}},
 			wantErr: false,
 		},
 		{
 			name:    "valid name and agent type is valid",
 			filters: []string{"agent=myagent"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"agent": {{
 					Type: "agent",
 					Name: "myagent",
@@ -44,7 +44,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and apm type is valid",
 			filters: []string{"apm=myapm"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"apm": {{
 					Type: "apm",
 					Name: "myapm",
@@ -58,7 +58,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and beat type is valid",
 			filters: []string{"beat=mybeat"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"beat": {{
 					Type: "beat",
 					Name: "mybeat",
@@ -72,7 +72,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and elasticsearch type is valid",
 			filters: []string{"elasticsearch=mycluster"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"elasticsearch": {{
 					Type: "elasticsearch",
 					Name: "mycluster",
@@ -86,7 +86,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and enterprisesearch type is valid",
 			filters: []string{"enterprisesearch=mycluster"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"enterprisesearch": {{
 					Type: "enterprisesearch",
 					Name: "mycluster",
@@ -100,7 +100,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and kibana type is valid",
 			filters: []string{"kibana=mykb"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"kibana": {{
 					Type: "kibana",
 					Name: "mykb",
@@ -114,7 +114,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and maps type is valid",
 			filters: []string{"maps=mymaps"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"maps": {{
 					Type: "maps",
 					Name: "mymaps",
@@ -128,7 +128,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "multiple valid filters return correctly",
 			filters: []string{"elasticsearch=mycluster", "kibana=my-kb", "agent=my-agent"},
-			want: Filters{ByType: map[string][]Filter{
+			want: Filters{byType: map[string][]Filter{
 				"agent": {{
 					Type: "agent",
 					Name: "my-agent",
@@ -156,7 +156,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "invalid type is invalid",
 			filters: []string{"type=invalid"},
-			want:    Filters{ByType: map[string][]Filter{}},
+			want:    Filters{byType: map[string][]Filter{}},
 			wantErr: true,
 		},
 	}
@@ -194,7 +194,7 @@ func TestFilters_Matches(t *testing.T) {
 		selector.Add(*req)
 	}
 	defaultFilters := Filters{
-		ByType: map[string][]Filter{
+		byType: map[string][]Filter{
 			"elasticsearch": {{
 				Type:     "elasticsearch",
 				Name:     "my-cluster",
@@ -231,7 +231,7 @@ func TestFilters_Matches(t *testing.T) {
 				"elasticsearch.k8s.elastic.co/version":                    "8.2.3",
 				"statefulset.kubernetes.io/pod-name":                      "my-cluster-es-default-0",
 			},
-			filterMap: defaultFilters.ByType,
+			filterMap: defaultFilters.byType,
 			want:      true,
 		},
 		{
@@ -242,14 +242,14 @@ func TestFilters_Matches(t *testing.T) {
 				"common.k8s.elastic.co/type":   "agent",
 				"pod-template-hash":            "7cbfdc4d78",
 			},
-			filterMap: defaultFilters.ByType,
+			filterMap: defaultFilters.byType,
 			want:      false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := Filters{
-				ByType: tt.filterMap,
+				byType: tt.filterMap,
 			}
 			if got := f.Matches(tt.labels); got != tt.want {
 				t.Errorf("Filters.Matches() = %v, want %v", got, tt.want)

@@ -90,13 +90,13 @@ func Run(params Params) error {
 			return kubectl.Version(writer)
 		},
 		"nodes.json": func(writer io.Writer) error {
-			return kubectl.Get("nodes", "", filters.Filters{}, writer)
+			return kubectl.GetByLabel("nodes", "", filters.Filters{}, writer)
 		},
 		"podsecuritypolicies.json": func(writer io.Writer) error {
-			return kubectl.Get("podsecuritypolicies", "", filters.Filters{}, writer)
+			return kubectl.GetByLabel("podsecuritypolicies", "", filters.Filters{}, writer)
 		},
 		"storageclasses.json": func(writer io.Writer) error {
-			return kubectl.Get("storageclasses", "", filters.Filters{}, writer)
+			return kubectl.GetByLabel("storageclasses", "", filters.Filters{}, writer)
 		},
 		"clusterroles.txt": func(writer io.Writer) error {
 			return kubectl.Describe("clusterroles", "elastic", "", writer)
@@ -113,7 +113,7 @@ func Run(params Params) error {
 
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
 
-		zipFile.Add(getResources(kubectl.Get, ns, filters.Filters{}, []string{
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, filters.Filters{}, []string{
 			"statefulsets",
 			"pods",
 			"services",
@@ -148,7 +148,7 @@ LOOP:
 		default:
 		}
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		zipFile.Add(getResources(kubectl.Get, ns, params.Filters, []string{
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, params.Filters, []string{
 			"statefulsets",
 			"replicasets",
 			"deployments",
@@ -161,7 +161,7 @@ LOOP:
 			"controllerrevisions",
 		}))
 
-		zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filters, []string{
+		zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 			"kibana",
 			"elasticsearch",
 			"apmserver",
@@ -169,7 +169,7 @@ LOOP:
 
 		// Filters is intentionally empty here, as Elastic labels
 		// are not applied to these resources.
-		zipFile.Add(getResources(kubectl.Get, ns, filters.Filters{}, []string{
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, filters.Filters{}, []string{
 			"persistentvolumes",
 			"events",
 			"networkpolicies",
@@ -177,20 +177,20 @@ LOOP:
 		}))
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
-			zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filters, []string{
+			zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 				"enterprisesearch",
 				"beat",
 			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
-			zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filters, []string{
+			zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 				"agent",
 			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
-			zipFile.Add(getResources(kubectl.GetElastic, ns, params.Filters, []string{
+			zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 				"elasticmapsserver",
 			}))
 		}

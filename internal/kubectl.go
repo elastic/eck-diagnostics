@@ -159,54 +159,29 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 	return options.Run()
 }
 
-// Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
-// If filters is not empty, this will only return resources within the cluster that it's labels match
+// GetByLabel retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// If filters is not empty, this will only return resources within the cluster that its labels match
 // at least one of the filter's label selectors.
-func (c Kubectl) Get(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
-	r, err := c.getResources(resource, namespace)
-	if err != nil {
-		return err
-	}
-	printer, err := printers.NewTypeSetter(scheme.Scheme).WrapToPrinter(&printers.JSONPrinter{}, nil)
-	if err != nil {
-		return err
-	}
-
-	obj, err := r.Object()
-	if err != nil {
-		return err
-	}
-
-	// If there are no filters, simply return the unfiltered resources.
-	if filters.Empty() {
-		return printer.PrintObj(obj, w)
-	}
-
-	// Otherwise, convert the returned resource to a List, and filter for any matching objects
-	// that have labels that match any of the given filter's label selector.
-	var list *corev1.List
-	list, ok := obj.(*corev1.List)
-	if !ok {
-		return fmt.Errorf("while converting returned object (%T) to list", obj)
-	}
-
-	filtered := corev1.List{}
-	for _, item := range list.Items {
-		labels, err := meta.NewAccessor().Labels(item.Object)
-		if err != nil {
-			return fmt.Errorf("while accessing labels for %s: %w", item.Object.GetObjectKind().GroupVersionKind().String(), err)
-		}
-		if filters.Matches(labels) {
-			filtered.Items = append(filtered.Items, item)
-		}
-	}
-
-	return printer.PrintObj(&filtered, w)
+func (c Kubectl) GetByLabel(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	return c.getFiltered(resource, namespace, w,
+		func(object metav1.Object) bool {
+			return filters.Matches(object.GetLabels())
+		},
+		filters.Empty())
 }
 
-// GetElastic retrieves the Elastic K8s objects of type resource in namespace,
-// filters by name, and marshals them into the writer w.
-func (c Kubectl) GetElastic(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+// GetByName retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// If filters is not empty, this will only return resources within the cluster that its name matches
+// at least one of the filter's type+name pair.
+func (c Kubectl) GetByName(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	return c.getFiltered(resource, namespace, w,
+		func(object metav1.Object) bool {
+			return filters.Contains(object.GetName(), resource)
+		},
+		filters.Empty())
+}
+
+func (c Kubectl) getFiltered(resource, namespace string, w io.Writer, filter func(object metav1.Object) bool, skipFilter bool) error {
 	r, err := c.getResources(resource, namespace)
 	if err != nil {
 		return err
@@ -223,12 +198,12 @@ func (c Kubectl) GetElastic(resource, namespace string, filters internal_filters
 	}
 
 	// If there are no filters, simply return the unfiltered resources.
-	if filters.Empty() {
+	if skipFilter {
 		return printer.PrintObj(obj, w)
 	}
 
 	// Otherwise, convert the returned resource to a List, and filter for any matching objects
-	// that have names that match any of the given type filter's name.
+	// using the provided filter func.
 	var list *corev1.List
 	list, ok := obj.(*corev1.List)
 	if !ok {
@@ -237,12 +212,12 @@ func (c Kubectl) GetElastic(resource, namespace string, filters internal_filters
 
 	filtered := corev1.List{}
 	for _, item := range list.Items {
-		name, err := meta.NewAccessor().Name(item.Object)
+		obj, err := meta.Accessor(item.Object)
 		if err != nil {
-			return fmt.Errorf("while accessing name for %s: %w", item.Object.GetObjectKind().GroupVersionKind().String(), err)
+			return fmt.Errorf("while accessing metadata for %s: %w", item.Object.GetObjectKind().GroupVersionKind().String(), err)
 		}
 
-		if filters.Contains(name, resource) {
+		if filter(obj) {
 			filtered.Items = append(filtered.Items, item)
 		}
 	}
@@ -402,7 +377,7 @@ func (c Kubectl) Logs(namespace string, selector string, filters internal_filter
 		case *corev1.PodList:
 			for _, p := range t.Items {
 				// ignore pod when filters are being applied, and the pod doesn't match the filters.
-				if !filters.Empty() && !filters.Matches(p.Labels) {
+				if !filters.Matches(p.Labels) {
 					continue
 				}
 				if err := c.requestLogs(p, out); err != nil {
@@ -411,7 +386,7 @@ func (c Kubectl) Logs(namespace string, selector string, filters internal_filter
 			}
 		case *corev1.Pod:
 			// ignore pod when filters are being applied, and the pod doesn't match the filters.
-			if !filters.Empty() && !filters.Matches(t.Labels) {
+			if !filters.Matches(t.Labels) {
 				continue
 			}
 			if err := c.requestLogs(*t, out); err != nil {
