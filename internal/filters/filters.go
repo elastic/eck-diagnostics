@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/utils/strings/slices"
 )
 
@@ -144,16 +143,5 @@ func processSelector(typ, name string) (labels.Selector, error) {
 		"common.k8s.elastic.co/type":                       typ,
 		fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
 	}
-	s := labels.SelectorFromValidatedSet(set)
-	for sk, v := range set {
-		req, err := labels.NewRequirement(sk, selection.Equals, []string{v})
-		if err != nil {
-			return nil, err
-		}
-		if req == nil {
-			return nil, fmt.Errorf("invalid requirement")
-		}
-		s.Add(*req)
-	}
-	return s, nil
+	return labels.SelectorFromValidatedSet(set), nil
 }
