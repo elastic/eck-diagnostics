@@ -104,10 +104,7 @@ func parse(source []string) (Filters, error) {
 		if _, ok := filters.byType[typ]; ok {
 			return filters, fmt.Errorf("invalid filter: %s: multiple filters for the same type (%s) are not supported", fltr, typ)
 		}
-		selector, err := processSelector(typ, name)
-		if err != nil {
-			return filters, fmt.Errorf("while processing label selector: %w", err)
-		}
+		selector := processSelector(typ, name)
 		filters.byType[typ] = append(filters.byType[typ], Filter{
 			Name:     name,
 			Type:     typ,
@@ -134,7 +131,7 @@ func validateType(typ string) error {
 //	Selector.Match(LabelSet)
 //
 // against any runtime object's labels.
-func processSelector(typ, name string) (labels.Selector, error) {
+func processSelector(typ, name string) labels.Selector {
 	nameAttr := "name"
 	if typ == "elasticsearch" {
 		nameAttr = "cluster-name"
@@ -143,5 +140,5 @@ func processSelector(typ, name string) (labels.Selector, error) {
 		"common.k8s.elastic.co/type":                       typ,
 		fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
 	}
-	return labels.SelectorFromValidatedSet(set), nil
+	return labels.SelectorFromValidatedSet(set)
 }
