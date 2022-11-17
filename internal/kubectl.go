@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -158,12 +159,34 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 	return options.Run()
 }
 
-// Get retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
-func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
+// GetByLabel retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// If filters is not empty, this will only return resources within the cluster that its labels match
+// at least one of the filter's label selectors.
+func (c Kubectl) GetByLabel(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	return c.getFiltered(resource, namespace, w,
+		func(object metav1.Object) bool {
+			return filters.Matches(object.GetLabels())
+		},
+		filters.Empty())
+}
+
+// GetByName retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// If filters is not empty, this will only return resources within the cluster that its name matches
+// at least one of the filter's type+name pair.
+func (c Kubectl) GetByName(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	return c.getFiltered(resource, namespace, w,
+		func(object metav1.Object) bool {
+			return filters.Contains(object.GetName(), resource)
+		},
+		filters.Empty())
+}
+
+func (c Kubectl) getFiltered(resource, namespace string, w io.Writer, filter func(object metav1.Object) bool, skipFilter bool) error {
 	r, err := c.getResources(resource, namespace)
 	if err != nil {
 		return err
 	}
+
 	printer, err := printers.NewTypeSetter(scheme.Scheme).WrapToPrinter(&printers.JSONPrinter{}, nil)
 	if err != nil {
 		return err
@@ -174,7 +197,32 @@ func (c Kubectl) Get(resource, namespace string, w io.Writer) error {
 		return err
 	}
 
-	return printer.PrintObj(obj, w)
+	// If there are no filters, simply return the unfiltered resources.
+	if skipFilter {
+		return printer.PrintObj(obj, w)
+	}
+
+	// Otherwise, convert the returned resource to a List, and filter for any matching objects
+	// using the provided filter func.
+	var list *corev1.List
+	list, ok := obj.(*corev1.List)
+	if !ok {
+		return fmt.Errorf("while converting returned object (%T) to list", obj)
+	}
+
+	filtered := corev1.List{}
+	for _, item := range list.Items {
+		obj, err := meta.Accessor(item.Object)
+		if err != nil {
+			return fmt.Errorf("while accessing metadata for %s: %w", item.Object.GetObjectKind().GroupVersionKind().String(), err)
+		}
+
+		if filter(obj) {
+			filtered.Items = append(filtered.Items, item)
+		}
+	}
+
+	return printer.PrintObj(&filtered, w)
 }
 
 // getResources retrieves the K8s objects of type resource and returns a resource.Result.
@@ -307,7 +355,7 @@ func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error
 }
 
 // Logs mimics "kubectl logs -l selector" and writes the result to writers produced by out when given a filename.
-func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Writer, error)) error {
+func (c Kubectl) Logs(namespace string, selector string, filters internal_filters.Filters, out func(string) (io.Writer, error)) error {
 	builder := c.factory.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
 		NamespaceParam(namespace).
@@ -328,11 +376,19 @@ func (c Kubectl) Logs(namespace string, selector string, out func(string) (io.Wr
 		switch t := obj.(type) {
 		case *corev1.PodList:
 			for _, p := range t.Items {
+				// ignore pod when filters are being applied, and the pod doesn't match the filters.
+				if !filters.Matches(p.Labels) {
+					continue
+				}
 				if err := c.requestLogs(p, out); err != nil {
 					return err
 				}
 			}
 		case *corev1.Pod:
+			// ignore pod when filters are being applied, and the pod doesn't match the filters.
+			if !filters.Matches(t.Labels) {
+				continue
+			}
 			if err := c.requestLogs(*t, out); err != nil {
 				return err
 			}

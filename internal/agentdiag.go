@@ -11,13 +11,14 @@ import (
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"github.com/elastic/eck-diagnostics/internal/extraction"
+	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, stopCh chan struct{}) {
+func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, stopCh chan struct{}, filters internal_filters.Filters) {
 	outputFile := time.Now().Format("eck-agent-diag-2006-01-02T15-04-05Z.zip")
 	resources, err := k.getResourcesMatching("pod", ns, "common.k8s.elastic.co/type=agent")
 	if err != nil {
@@ -31,6 +32,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		default:
 			// continue processing agents
 		}
+
 		resourceName := info.Name
 		labels, err := meta.NewAccessor().Labels(info.Object)
 		if err != nil {
@@ -51,6 +53,10 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 
 		if ver.LessThan(version.MustParseSemantic("7.16.0")) {
 			logger.Printf("Skipping %s/%s as it is below min version of 7.16.0", ns, resourceName)
+			return nil
+		}
+
+		if !filters.Matches(labels) {
 			return nil
 		}
 

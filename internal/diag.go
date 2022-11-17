@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/elastic/eck-diagnostics/internal/log"
 	"k8s.io/apimachinery/pkg/util/version"
 
@@ -38,6 +39,7 @@ type Params struct {
 	RunAgentDiagnostics     bool
 	Verbose                 bool
 	StackDiagnosticsTimeout time.Duration
+	Filters                 filters.Filters
 }
 
 // AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
@@ -81,18 +83,20 @@ func Run(params Params) error {
 		return err
 	}
 
+	// Filters is intentionally empty in many of these, as Elastic labels
+	// are not applied to these resources.
 	zipFile.Add(map[string]func(io.Writer) error{
 		"version.json": func(writer io.Writer) error {
 			return kubectl.Version(writer)
 		},
 		"nodes.json": func(writer io.Writer) error {
-			return kubectl.Get("nodes", "", writer)
+			return kubectl.GetByLabel("nodes", "", filters.Filters{}, writer)
 		},
 		"podsecuritypolicies.json": func(writer io.Writer) error {
-			return kubectl.Get("podsecuritypolicies", "", writer)
+			return kubectl.GetByLabel("podsecuritypolicies", "", filters.Filters{}, writer)
 		},
 		"storageclasses.json": func(writer io.Writer) error {
-			return kubectl.Get("storageclasses", "", writer)
+			return kubectl.GetByLabel("storageclasses", "", filters.Filters{}, writer)
 		},
 		"clusterroles.txt": func(writer io.Writer) error {
 			return kubectl.Describe("clusterroles", "elastic", "", writer)
@@ -109,7 +113,7 @@ func Run(params Params) error {
 
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
 
-		zipFile.Add(getResources(kubectl, ns, []string{
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, filters.Filters{}, []string{
 			"statefulsets",
 			"pods",
 			"services",
@@ -126,7 +130,9 @@ func Run(params Params) error {
 			},
 		})
 
-		if err := kubectl.Logs(ns, "", zipFile.Create); err != nil {
+		// Filters is intentionally empty here, as label filtering doesn't apply to
+		// pods in the operator namespace.
+		if err := kubectl.Logs(ns, "", filters.Filters{}, zipFile.Create); err != nil {
 			zipFile.AddError(err)
 		}
 	}
@@ -142,41 +148,49 @@ LOOP:
 		default:
 		}
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		zipFile.Add(getResources(kubectl, ns, []string{
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, params.Filters, []string{
 			"statefulsets",
 			"replicasets",
 			"deployments",
 			"daemonsets",
 			"pods",
-			"persistentvolumes",
 			"persistentvolumeclaims",
 			"services",
 			"endpoints",
 			"configmaps",
-			"events",
-			"networkpolicies",
 			"controllerrevisions",
+		}))
+
+		zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 			"kibana",
 			"elasticsearch",
 			"apmserver",
+		}))
+
+		// Filters is intentionally empty here, as Elastic labels
+		// are not applied to these resources.
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, filters.Filters{}, []string{
+			"persistentvolumes",
+			"events",
+			"networkpolicies",
 			"serviceaccount",
 		}))
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.2.0")) {
-			zipFile.Add(getResources(kubectl, ns, []string{
+			zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 				"enterprisesearch",
 				"beat",
 			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.4.0")) {
-			zipFile.Add(getResources(kubectl, ns, []string{
+			zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 				"agent",
 			}))
 		}
 
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
-			zipFile.Add(getResources(kubectl, ns, []string{
+			zipFile.Add(getResources(kubectl.GetByName, ns, params.Filters, []string{
 				"elasticmapsserver",
 			}))
 		}
@@ -187,11 +201,11 @@ LOOP:
 			},
 		})
 
-		getLogs(kubectl, zipFile, ns,
+		getLogs(kubectl, zipFile, ns, params.Filters,
 			"common.k8s.elastic.co/type=elasticsearch",
 			"common.k8s.elastic.co/type=kibana",
 			"common.k8s.elastic.co/type=apm-server",
-			// the below where introduced in later version but label selector will just return no result:
+			// the below were introduced in later version but label selector will just return no result:
 			"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
 			"common.k8s.elastic.co/type=beat",              // 1.2.0
 			"common.k8s.elastic.co/type=agent",             // 1.4.0
@@ -199,11 +213,11 @@ LOOP:
 		)
 
 		if params.RunStackDiagnostics {
-			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, params.StackDiagnosticsTimeout, stopCh)
+			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, params.StackDiagnosticsTimeout, stopCh, params.Filters)
 		}
 
 		if params.RunAgentDiagnostics {
-			runAgentDiagnostics(kubectl, ns, zipFile, params.Verbose, stopCh)
+			runAgentDiagnostics(kubectl, ns, zipFile, params.Verbose, stopCh, params.Filters)
 		}
 	}
 
@@ -232,9 +246,9 @@ func addDiagnosticLogToArchive(zipFile *archive.ZipFile, logContents *bytes.Buff
 }
 
 // getLogs extracts logs from all Pods that match the given selectors in the namespace ns and adds them to zipFile.
-func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, selector ...string) {
+func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, filters filters.Filters, selector ...string) {
 	for _, s := range selector {
-		if err := k.Logs(ns, s, zipFile.Create); err != nil {
+		if err := k.Logs(ns, s, filters, zipFile.Create); err != nil {
 			zipFile.AddError(err)
 		}
 	}
@@ -242,12 +256,12 @@ func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, selector ...string
 
 // getResources produces a map of filenames to functions that will when invoked retrieve the resources identified by rs
 // and add write them to a writer passed to said functions.
-func getResources(k *Kubectl, ns string, rs []string) map[string]func(io.Writer) error {
+func getResources(f func(string, string, filters.Filters, io.Writer) error, ns string, filters filters.Filters, rs []string) map[string]func(io.Writer) error {
 	m := map[string]func(io.Writer) error{}
 	for _, r := range rs {
 		resource := r
 		m[archive.Path(ns, resource+".json")] = func(w io.Writer) error {
-			return k.Get(resource, ns, w)
+			return f(resource, ns, filters, w)
 		}
 	}
 	return m
