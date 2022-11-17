@@ -245,6 +245,17 @@ func TestFilters_Matches(t *testing.T) {
 			filterMap: defaultFilters.byType,
 			want:      false,
 		},
+		{
+			name: "empty filters matches",
+			labels: map[string]string{
+				"agent.k8s.elastic.co/name":    "fleet-server",
+				"agent.k8s.elastic.co/version": "8.2.3",
+				"common.k8s.elastic.co/type":   "agent",
+				"pod-template-hash":            "7cbfdc4d78",
+			},
+			filterMap: nil,
+			want:      true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

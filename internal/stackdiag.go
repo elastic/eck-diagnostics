@@ -395,7 +395,7 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 		}
 		tls := !(found && disabled)
 
-		if !filters.Contains(resourceName, typ) {
+		if !filters.Empty() && !filters.Contains(resourceName, typ) {
 			return nil
 		}
 
