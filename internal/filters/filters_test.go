@@ -170,7 +170,6 @@ func TestNew(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("New() = diff: %s", cmp.Diff(got, tt.want))
 			}
-
 		})
 	}
 }

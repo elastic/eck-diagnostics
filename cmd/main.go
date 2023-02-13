@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal"
@@ -25,7 +26,7 @@ func main() {
 		Use:     "eck-diagnostics",
 		Short:   "ECK support diagnostics tool",
 		Long:    "Dump ECK and Kubernetes data for support and troubleshooting purposes.",
-		PreRunE: parseFilters,
+		PreRunE: preRunOperations,
 		Version: internal.Version(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return internal.Run(diagParams)
@@ -39,6 +40,7 @@ func main() {
 	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
+	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostic-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
 	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")
@@ -51,6 +53,46 @@ func main() {
 		// cobra logs the error already no need to redo that
 		exitWithError(nil)
 	}
+}
+
+func preRunOperations(cmd *cobra.Command, args []string) error {
+	if err := validation(cmd, args); err != nil {
+		return err
+	}
+	return parseFilters(cmd, args)
+}
+
+func validation(_ *cobra.Command, _ []string) error {
+	if diagParams.OutputName == "" {
+		return fmt.Errorf("output-name cannot be empty")
+	}
+	if filepath.Ext(diagParams.OutputName) != ".zip" {
+		return fmt.Errorf("output-name extension must end in '.zip'")
+	}
+
+	type validations struct {
+		namespaces []string
+		name       string
+	}
+	for _, v := range []validations{
+		{
+			namespaces: diagParams.OperatorNamespaces,
+			name:       "operator-namespaces",
+		}, {
+			namespaces: diagParams.ResourcesNamespaces,
+			name:       "resources-namespaces",
+		},
+	} {
+		if len(v.namespaces) == 0 {
+			return fmt.Errorf("%s is a required parameter", v.name)
+		}
+		for _, ns := range v.namespaces {
+			if ns == "" {
+				return fmt.Errorf("%s cannot be an empty string", v.name)
+			}
+		}
+	}
+	return nil
 }
 
 func parseFilters(_ *cobra.Command, _ []string) error {
