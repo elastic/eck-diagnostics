@@ -77,7 +77,7 @@ func Run(params Params) error {
 		return err
 	}
 
-	zipFileName := diagnosticFilename(params.OutputDir, params.OutputName)
+	zipFileName := filepath.Join(params.OutputDir, params.OutputName)
 	zipFile, err := archive.NewZipFile(zipFileName, about().Version, logger)
 	if err != nil {
 		return err
@@ -265,12 +265,4 @@ func getResources(f func(string, string, filters.Filters, io.Writer) error, ns s
 		}
 	}
 	return m
-}
-
-// diagnosticFilename calculates a file name to be used for the diagnostic archive based on the current time.
-func diagnosticFilename(dir, fileName string) string {
-	if dir != "" {
-		fileName = filepath.Join(dir, fileName)
-	}
-	return fileName
 }

@@ -16,6 +16,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	operatorNamespaces  = "operator-namespaces"
+	resourcesNamespaces = "resources-namespaces"
+)
+
 var (
 	filters    []string
 	diagParams = internal.Params{}
@@ -35,17 +40,17 @@ func main() {
 	cmd.Flags().StringVar(&diagParams.DiagnosticImage, "diagnostic-image", internal.DiagnosticImage, "Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics")
 	cmd.Flags().BoolVar(&diagParams.RunStackDiagnostics, "run-stack-diagnostics", true, "Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster")
 	cmd.Flags().BoolVar(&diagParams.RunAgentDiagnostics, "run-agent-diagnostics", false, "Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive")
-	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, "operator-namespaces", "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
-	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, "resources-namespaces", "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
+	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, operatorNamespaces, "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
+	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, resourcesNamespaces, "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
 	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
-	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostic-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
+	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostics-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
 	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")
 
-	if err := cmd.MarkFlagRequired("resources-namespaces"); err != nil {
+	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
 		exitWithError(err)
 	}
 
@@ -77,10 +82,10 @@ func validation(_ *cobra.Command, _ []string) error {
 	for _, v := range []validations{
 		{
 			namespaces: diagParams.OperatorNamespaces,
-			name:       "operator-namespaces",
+			name:       operatorNamespaces,
 		}, {
 			namespaces: diagParams.ResourcesNamespaces,
-			name:       "resources-namespaces",
+			name:       resourcesNamespaces,
 		},
 	} {
 		if len(v.namespaces) == 0 {
