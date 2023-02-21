@@ -237,7 +237,7 @@ func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *archive.ZipFile
 // extractJobResults runs an informer to be notified of Pod status changes and extract diagnostic data from any Pod
 // that has reached running state.
 func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
-	ds.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := ds.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if pod, ok := obj.(*corev1.Pod); ok && ds.verbose {
 				logger.Printf("Diagnostic pod %s/%s added\n", pod.Namespace, pod.Name)
@@ -301,9 +301,12 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 			}
 		},
 	})
+	if err != nil {
+		file.AddError(err)
+	}
 
 	ds.informer.Run(ds.context.Done())
-	err := ds.context.Err()
+	err = ds.context.Err()
 
 	// we cancel the context when we are done but want to log any other errors e.g. deadline exceeded
 	if err != nil && !errors.Is(err, context.Canceled) {
