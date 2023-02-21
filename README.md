@@ -33,6 +33,7 @@ Flags:
       --kubeconfig string                    optional path to kube config, defaults to $HOME/.kube/config
   -o, --operator-namespaces strings          Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
       --output-directory string              Path where to output diagnostic results
+  -n, --output-name string                   Name of the output diagnostics file (default "eck-diagnostic-2023-02-21T09-16-17.zip")
   -r, --resources-namespaces strings         Comma-separated list of namespace(s) in which resources are managed
       --run-agent-diagnostics                Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
       --run-stack-diagnostics                Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
