@@ -205,6 +205,7 @@ func TestFilters_Matches(t *testing.T) {
 		name      string
 		labels    map[string]string
 		filterMap map[string][]Filter
+		selector  labels.Selector
 		want      bool
 	}{
 		{
@@ -255,11 +256,23 @@ func TestFilters_Matches(t *testing.T) {
 			filterMap: nil,
 			want:      true,
 		},
+		{
+			name: "with selector matches",
+			labels: map[string]string{
+				"control-plane": "elastic-operator",
+			},
+			filterMap: defaultFilters.byType,
+			selector: labels.Set{
+				"control-plane": "elastic-operator",
+			}.AsSelector(),
+			want: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := Filters{
-				byType: tt.filterMap,
+				byType:   tt.filterMap,
+				selector: tt.selector,
 			}
 			if got := f.Matches(tt.labels); got != tt.want {
 				t.Errorf("Filters.Matches() = %v, want %v", got, tt.want)
