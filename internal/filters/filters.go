@@ -8,18 +8,25 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/utils/strings/slices"
 )
 
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
 	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
+	Empty      = Filters{}
 )
 
 // Filters contains a Filter map for each Elastic type given in the filter "source".
 type Filters struct {
-	byType map[string][]Filter
+	byType   map[string][]Filter
+	selector labels.Selector
+}
+
+func (f Filters) WithSelector(selector labels.Selector) Filters {
+	f.selector = selector
+	return f
 }
 
 // Empty returns if there are no defined filters.
@@ -40,6 +47,9 @@ func (f Filters) Matches(lbls map[string]string) bool {
 				return true
 			}
 		}
+	}
+	if f.selector != nil {
+		return f.selector.Matches(labels.Set(lbls))
 	}
 	return false
 }
