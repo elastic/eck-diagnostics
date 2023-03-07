@@ -134,21 +134,17 @@ func Run(params Params) error {
 			"serviceaccount",
 		}))
 
-		// Filters is intentionally empty here, as label filtering doesn't apply to
-		// pods in the operator namespace.
-		if err := kubectl.Logs(ns, "", filters.Empty, zipFile.Create); err != nil {
-			zipFile.AddError(err)
-		}
-
-		if err := kubectl.Logs(ns, "", filters.Empty, zipFile.Create); err != nil {
-			zipFile.AddError(err)
-		}
-
 		zipFile.Add(map[string]func(io.Writer) error{
 			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
 				return kubectl.GetMeta("secrets", ns, writer)
 			},
 		})
+
+		// Filters is intentionally empty here, as label filtering doesn't apply to
+		// pods in the operator namespace.
+		if err := kubectl.Logs(ns, "", filters.Empty, zipFile.Create); err != nil {
+			zipFile.AddError(err)
+		}
 	}
 
 	maxOperatorVersion := max(operatorVersions)
@@ -188,7 +184,6 @@ LOOP:
 			if label == nil {
 				logger.Printf("Could not find label corresponding to ECK Operator: potentially not including operator data in diagnostics")
 			}
-			logger.Printf("Adding operator label %s to filters", label)
 			namespaceFilters = params.Filters.WithSelector(label.AsSelector())
 			logsLabels = append(logsLabels, label.AsSelector().String())
 		}
@@ -280,7 +275,6 @@ func getOperatorLabel(kc *Kubectl, ns string) (labels.Set, error) {
 	for _, sa := range saList.Items {
 		for k, v := range sa.Labels {
 			if k == "control-plane" && v == "elastic-operator" {
-				// Is this propagated?  Check
 				return labels.Set{"control-plane": "elastic-operator"}, nil
 			}
 			if k == "helm.sh/chart" && strings.Contains(v, "eck-operator") {

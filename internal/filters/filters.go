@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/strings/slices"
 )
 
 var (
