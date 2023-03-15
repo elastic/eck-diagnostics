@@ -118,9 +118,6 @@ func Run(params Params) error {
 		// Find the label in use by operator in this namespace and add this to
 		// the set of filters to ensure we always retrieve the objects
 		// associated with the ECK operator.
-		//
-		// 1) if using yaml manifests it will always be "control-plane=elastic-operator"
-		// 2) if using Helm, find label with key: helm.sh/chart, and value containing "eck-operator-*"
 		operatorLabel, err := getOperatorLabel(kubectl, ns)
 		if err != nil || operatorLabel == nil {
 			logger.Printf("Could not find label corresponding to ECK Operator in namespace %s: potentially not including operator data in diagnostics", ns)
@@ -239,13 +236,14 @@ LOOP:
 	return nil
 }
 
+// getOperatorLabel will attempt to find the labels associated with the ECK Operator, returning any errors.
+//
+// 1) if using yaml manifests it will always be "control-plane=elastic-operator"
+// 2) if using Helm, find label with key: helm.sh/chart, and value containing "eck-operator-*"
 func getOperatorLabel(kc *Kubectl, ns string) (labels.Set, error) {
 	saList, err := kc.Clientset.CoreV1().ServiceAccounts(ns).List(context.Background(), v1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("while retrieving list of serviceaccounts in ns '%s': %w", ns, err)
-	}
-	if saList == nil {
-		return nil, fmt.Errorf("nil sa while retrieving list of serviceaccounts in ns '%s'", ns)
 	}
 	for _, sa := range saList.Items {
 		for k, v := range sa.Labels {
