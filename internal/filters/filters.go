@@ -25,9 +25,7 @@ type Filters struct {
 }
 
 func (f Filters) WithSelectors(selectors []labels.Selector) Filters {
-	for _, selector := range selectors {
-		f.selectors = append(f.selectors, selector)
-	}
+	f.selectors = append(f.selectors, selectors...)
 	return f
 }
 
