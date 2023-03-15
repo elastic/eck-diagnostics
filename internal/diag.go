@@ -15,10 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/elastic/eck-diagnostics/internal/log"
-	"golang.org/x/exp/slices"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/version"
@@ -111,48 +112,33 @@ func Run(params Params) error {
 		},
 	})
 
+	var operatorLabels []labels.Set
 	operatorVersions := make([]*version.Version, 0, len(params.OperatorNamespaces))
-
 	for _, ns := range params.OperatorNamespaces {
+		// Find the label in use by operator in this namespace and add this to
+		// the set of filters to ensure we always retrieve the objects
+		// associated with the ECK operator.
+		//
+		// 1) if using yaml manifests it will always be "control-plane=elastic-operator"
+		// 2) if using Helm, find label with key: helm.sh/chart, and value containing "eck-operator-*"
+		operatorLabel, err := getOperatorLabel(kubectl, ns)
+		if err != nil || operatorLabel == nil {
+			logger.Printf("Could not find label corresponding to ECK Operator in namespace %s: potentially not including operator data in diagnostics", ns)
+		} else {
+			operatorLabels = append(operatorLabels, operatorLabel)
+		}
+
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
-
-		// If this operator namespace is also included in the resources namespace,
-		// just continue as it will be handled within the resource namespaces loop.
-		if slices.Contains(params.ResourcesNamespaces, ns) {
-			continue
-		}
-
-		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		zipFile.Add(getResources(kubectl.GetByLabel, ns, filters.Empty, []string{
-			"statefulsets",
-			"pods",
-			"services",
-			"configmaps",
-			"events",
-			"networkpolicies",
-			"controllerrevisions",
-			"serviceaccount",
-		}))
-
-		zipFile.Add(map[string]func(io.Writer) error{
-			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
-				return kubectl.GetMeta("secrets", ns, writer)
-			},
-		})
-
-		// Filters is intentionally empty here, as label filtering doesn't apply to
-		// pods in the operator namespace.
-		if err := kubectl.Logs(ns, "", filters.Empty, zipFile.Create); err != nil {
-			zipFile.AddError(err)
-		}
 	}
 
 	maxOperatorVersion := max(operatorVersions)
 	logVersion(maxOperatorVersion)
 
+	allNamespaces := sets.New(params.ResourcesNamespaces...)
+	allNamespaces.Insert(params.OperatorNamespaces...)
+
 LOOP:
-	for _, ns := range params.ResourcesNamespaces {
-		namespaceFilters := params.Filters
+	for ns := range allNamespaces {
 		select {
 		case <-stopCh:
 			break LOOP
@@ -170,23 +156,12 @@ LOOP:
 			"common.k8s.elastic.co/type=maps",              // 1.6.0
 		}
 
-		if slices.Contains(params.OperatorNamespaces, ns) {
-			// If the current resource namespace is present within the set of
-			// operator namespaces then find the label in use by operator and
-			// add this to the set of filters.
-			//
-			// 1) if using yaml manifests it will always be "control-plane=elastic-operator"
-			// 2) if using Helm, find label with key: helm.sh/chart, and value containing "eck-operator-*"
-			label, err := getOperatorLabel(kubectl, ns)
-			if err != nil {
-				return err
-			}
-			if label == nil {
-				logger.Printf("Could not find label corresponding to ECK Operator: potentially not including operator data in diagnostics")
-			}
-			namespaceFilters = params.Filters.WithSelector(label.AsSelector())
+		selectors := make([]labels.Selector, len(operatorLabels))
+		for i, label := range operatorLabels {
+			selectors[i] = label.AsSelector()
 			logsLabels = append(logsLabels, label.AsSelector().String())
 		}
+		namespaceFilters := params.Filters.WithSelectors(selectors)
 
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
 		zipFile.Add(getResources(kubectl.GetByLabel, ns, namespaceFilters, []string{

@@ -20,12 +20,14 @@ var (
 
 // Filters contains a Filter map for each Elastic type given in the filter "source".
 type Filters struct {
-	byType   map[string][]Filter
-	selector labels.Selector
+	byType    map[string][]Filter
+	selectors []labels.Selector
 }
 
-func (f Filters) WithSelector(selector labels.Selector) Filters {
-	f.selector = selector
+func (f Filters) WithSelectors(selectors []labels.Selector) Filters {
+	for _, selector := range selectors {
+		f.selectors = append(f.selectors, selector)
+	}
 	return f
 }
 
@@ -48,8 +50,10 @@ func (f Filters) Matches(lbls map[string]string) bool {
 			}
 		}
 	}
-	if f.selector != nil {
-		return f.selector.Matches(labels.Set(lbls))
+	for _, selector := range f.selectors {
+		if selector.Matches(labels.Set(lbls)) {
+			return true
+		}
 	}
 	return false
 }
