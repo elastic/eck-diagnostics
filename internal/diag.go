@@ -134,6 +134,24 @@ func Run(params Params) error {
 	allNamespaces := sets.New(params.ResourcesNamespaces...)
 	allNamespaces.Insert(params.OperatorNamespaces...)
 
+	logsLabels := []string{
+		"common.k8s.elastic.co/type=elasticsearch",
+		"common.k8s.elastic.co/type=kibana",
+		"common.k8s.elastic.co/type=apm-server",
+		// the below were introduced in later version but label selector will just return no result:
+		"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
+		"common.k8s.elastic.co/type=beat",              // 1.2.0
+		"common.k8s.elastic.co/type=agent",             // 1.4.0
+		"common.k8s.elastic.co/type=maps",              // 1.6.0
+	}
+
+	selectors := make([]labels.Selector, len(operatorLabels))
+	for i, label := range operatorLabels {
+		selectors[i] = label.AsSelector()
+		logsLabels = append(logsLabels, label.AsSelector().String())
+	}
+	namespaceFilters := params.Filters.WithSelectors(selectors)
+
 LOOP:
 	for ns := range allNamespaces {
 		select {
@@ -141,24 +159,6 @@ LOOP:
 			break LOOP
 		default:
 		}
-
-		logsLabels := []string{
-			"common.k8s.elastic.co/type=elasticsearch",
-			"common.k8s.elastic.co/type=kibana",
-			"common.k8s.elastic.co/type=apm-server",
-			// the below were introduced in later version but label selector will just return no result:
-			"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
-			"common.k8s.elastic.co/type=beat",              // 1.2.0
-			"common.k8s.elastic.co/type=agent",             // 1.4.0
-			"common.k8s.elastic.co/type=maps",              // 1.6.0
-		}
-
-		selectors := make([]labels.Selector, len(operatorLabels))
-		for i, label := range operatorLabels {
-			selectors[i] = label.AsSelector()
-			logsLabels = append(logsLabels, label.AsSelector().String())
-		}
-		namespaceFilters := params.Filters.WithSelectors(selectors)
 
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
 		zipFile.Add(getResources(kubectl.GetByLabel, ns, namespaceFilters, []string{
