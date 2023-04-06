@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/cmd/exec"
+	"k8s.io/kubectl/pkg/cmd/get"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
@@ -223,6 +224,67 @@ func (c Kubectl) getFiltered(resource, namespace string, w io.Writer, filter fun
 	}
 
 	return printer.PrintObj(&filtered, w)
+}
+
+// GetInHumanReadable retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// If filters is not empty, this will only return resources within the cluster that its labels match
+// at least one of the filter's label selectors.
+func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	execErrOut := io.Discard
+	if c.verbose {
+		execErrOut = c.errOut
+	}
+
+	pipe_r, pipe_w := io.Pipe()
+	defer pipe_r.Close()
+
+	// GetOptions.Run() will output to the pipe writer.
+	options := get.NewGetOptions("eck-diagnostics", genericclioptions.IOStreams{In: nil, Out: pipe_w, ErrOut: execErrOut})
+	cmd := get.NewCmdGet(options.CmdParent, c.factory, options.IOStreams)
+
+	// Suppresses output to stderr
+	options.IgnoreNotFound = true
+	// Needs to show labels for filtering
+	ShowLabels := true
+	options.PrintFlags.HumanReadableFlags.ShowLabels = &ShowLabels
+
+	if err :=  options.Complete(c.factory, cmd, []string{resource}); err != nil {
+		return err
+	}
+
+	// Needs to set ns options here since the above Complete() overrides them using values from factory.
+	options.Namespace = namespace
+	options.ExplicitNamespace = true
+
+	if err :=  options.Validate(); err != nil {
+		return err
+	}
+
+	go func() {
+		defer pipe_w.Close()
+		// Simulates "kubectl --ignore-not-found --show-labels --namespace {{namespace}} get {{resource}}"
+		options.Run(c.factory, cmd, []string{resource})
+	}()
+
+	// Bridges pipe reader to the writer w with or without filtering.
+	if filters.Empty() {
+		_, err := io.Copy(w, pipe_r)
+		return err
+	} else {
+		scanner, index := bufio.NewScanner(pipe_r), 0
+		for scanner.Scan() {
+			line := scanner.Text()  // either blank, header, or resource line
+			if line == "" {
+				fmt.Fprintln(w, line)
+			} else if strings.HasPrefix(line, "NAME ") {
+				index = strings.LastIndex(line, "LABELS")
+				fmt.Fprintln(w, line)
+			} else if index > 0 && filters.MatchesAgainstString(line[index:]) {
+				fmt.Fprintln(w, line)
+			}
+		}
+		return scanner.Err()
+	}
 }
 
 // getResources retrieves the K8s objects of type resource and returns a resource.Result.

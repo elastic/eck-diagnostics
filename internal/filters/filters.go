@@ -44,6 +44,20 @@ func (f Filters) Matches(lbls map[string]string) bool {
 	return false
 }
 
+// MatchesAgainstString will determine if the given labels string matches
+// any of the Filter's label selectors.
+func (f Filters) MatchesAgainstString(labelsString string) bool {
+	pairs := strings.Split(labelsString, ",")
+	labels := make(map[string]string, len(pairs))
+
+	for _, pair := range pairs {
+		kv := strings.SplitN(pair, "=", 2)
+		labels[kv[0]] = kv[1]
+	}
+
+	return f.Matches(labels)
+}
+
 // Contains will check if any of the filters of named type 'typ'
 // contain a filter for an object named 'name'.
 func (f Filters) Contains(name, typ string) bool {

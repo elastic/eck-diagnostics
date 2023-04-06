@@ -7,6 +7,7 @@ package filters
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -263,6 +264,20 @@ func TestFilters_Matches(t *testing.T) {
 			}
 			if got := f.Matches(tt.labels); got != tt.want {
 				t.Errorf("Filters.Matches() = %v, want %v", got, tt.want)
+			}
+		})
+		t.Run(tt.name, func(t *testing.T) {
+			pairs := []string{}
+			for key, value := range tt.labels { 
+				pairs = append(pairs, fmt.Sprintf("%s=%s", key, value))
+			}
+			labelsString := strings.Join(pairs, ",")  // KEY_1=VAL_1,KEY_2=VAL_2
+
+			f := Filters{
+				byType: tt.filterMap,
+			}
+			if got := f.MatchesAgainstString(labelsString); got != tt.want {
+				t.Errorf("Filters.MatchesAgainstString() = %v, want %v", got, tt.want)
 			}
 		})
 	}

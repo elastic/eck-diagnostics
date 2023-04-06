@@ -7,6 +7,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -130,6 +131,10 @@ func Run(params Params) error {
 			},
 		})
 
+		zipFile.Add(getResources(kubectl.GetInHumanReadable, ns, filters.Filters{}, []string{
+			"all",
+		}, "get-%s.txt"))
+
 		// Filters is intentionally empty here, as label filtering doesn't apply to
 		// pods in the operator namespace.
 		if err := kubectl.Logs(ns, "", filters.Filters{}, zipFile.Create); err != nil {
@@ -201,6 +206,15 @@ LOOP:
 			},
 		})
 
+		zipFile.Add(getResources(kubectl.GetInHumanReadable, ns, params.Filters, []string{
+			"all",
+		}, "get-%s.txt"))
+
+		// Filters is intentionally empty here, as labels are not applied to Elastic resources
+		zipFile.Add(getResources(kubectl.GetInHumanReadable, ns, filters.Filters{}, []string{
+			"elastic",
+		}, "get-%s.txt"))
+
 		getLogs(kubectl, zipFile, ns, params.Filters,
 			"common.k8s.elastic.co/type=elasticsearch",
 			"common.k8s.elastic.co/type=kibana",
@@ -255,12 +269,17 @@ func getLogs(k *Kubectl, zipFile *archive.ZipFile, ns string, filters filters.Fi
 }
 
 // getResources produces a map of filenames to functions that will when invoked retrieve the resources identified by rs
-// and add write them to a writer passed to said functions.
-func getResources(f func(string, string, filters.Filters, io.Writer) error, ns string, filters filters.Filters, rs []string) map[string]func(io.Writer) error {
+// and add write them to a writer passed to said functions. filenames are determined using format (default is "%s.json") with rs.
+func getResources(f func(string, string, filters.Filters, io.Writer) error, ns string, filters filters.Filters, rs []string, format ...string) map[string]func(io.Writer) error {
+	fname := "%s.json"
+	if len(format) > 0 {
+		fname = format[0]
+	}
+
 	m := map[string]func(io.Writer) error{}
 	for _, r := range rs {
 		resource := r
-		m[archive.Path(ns, resource+".json")] = func(w io.Writer) error {
+		m[archive.Path(ns, fmt.Sprintf(fname, resource))] = func(w io.Writer) error {
 			return f(resource, ns, filters, w)
 		}
 	}
