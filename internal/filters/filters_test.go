@@ -268,10 +268,10 @@ func TestFilters_Matches(t *testing.T) {
 		})
 		t.Run(tt.name, func(t *testing.T) {
 			pairs := []string{}
-			for key, value := range tt.labels { 
+			for key, value := range tt.labels {
 				pairs = append(pairs, fmt.Sprintf("%s=%s", key, value))
 			}
-			labelsString := strings.Join(pairs, ",")  // KEY_1=VAL_1,KEY_2=VAL_2
+			labelsString := strings.Join(pairs, ",") // KEY_1=VAL_1,KEY_2=VAL_2
 
 			f := Filters{
 				byType: tt.filterMap,

@@ -235,11 +235,11 @@ func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal
 		execErrOut = c.errOut
 	}
 
-	pipe_r, pipe_w := io.Pipe()
-	defer pipe_r.Close()
+	pipeR, pipeW := io.Pipe()
+	defer pipeR.Close()
 
 	// GetOptions.Run() will output to the pipe writer.
-	options := get.NewGetOptions("eck-diagnostics", genericclioptions.IOStreams{In: nil, Out: pipe_w, ErrOut: execErrOut})
+	options := get.NewGetOptions("eck-diagnostics", genericclioptions.IOStreams{In: nil, Out: pipeW, ErrOut: execErrOut})
 	cmd := get.NewCmdGet(options.CmdParent, c.factory, options.IOStreams)
 
 	// Suppresses output to stderr
@@ -248,7 +248,7 @@ func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal
 	ShowLabels := true
 	options.PrintFlags.HumanReadableFlags.ShowLabels = &ShowLabels
 
-	if err :=  options.Complete(c.factory, cmd, []string{resource}); err != nil {
+	if err := options.Complete(c.factory, cmd, []string{resource}); err != nil {
 		return err
 	}
 
@@ -256,35 +256,36 @@ func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal
 	options.Namespace = namespace
 	options.ExplicitNamespace = true
 
-	if err :=  options.Validate(); err != nil {
+	if err := options.Validate(); err != nil {
 		return err
 	}
 
 	go func() {
-		defer pipe_w.Close()
+		defer pipeW.Close()
 		// Simulates "kubectl --ignore-not-found --show-labels --namespace {{namespace}} get {{resource}}"
-		options.Run(c.factory, cmd, []string{resource})
+		_ := options.Run(c.factory, cmd, []string{resource})
 	}()
 
 	// Bridges pipe reader to the writer w with or without filtering.
 	if filters.Empty() {
-		_, err := io.Copy(w, pipe_r)
+		_, err := io.Copy(w, pipeR)
 		return err
-	} else {
-		scanner, index := bufio.NewScanner(pipe_r), 0
-		for scanner.Scan() {
-			line := scanner.Text()  // either blank, header, or resource line
-			if line == "" {
-				fmt.Fprintln(w, line)
-			} else if strings.HasPrefix(line, "NAME ") {
-				index = strings.LastIndex(line, "LABELS")
-				fmt.Fprintln(w, line)
-			} else if index > 0 && filters.MatchesAgainstString(line[index:]) {
-				fmt.Fprintln(w, line)
-			}
-		}
-		return scanner.Err()
 	}
+
+	scanner, index := bufio.NewScanner(pipeR), 0
+	for scanner.Scan() {
+		line := scanner.Text() // either blank, header, or resource line
+		switch {
+		case line == "":
+			fmt.Fprintln(w, line)
+		case strings.HasPrefix(line, "NAME "):
+			index = strings.LastIndex(line, "LABELS")
+			fmt.Fprintln(w, line)
+		case index > 0 && filters.MatchesAgainstString(line[index:]):
+			fmt.Fprintln(w, line)
+		}
+	}
+	return scanner.Err()
 }
 
 // getResources retrieves the K8s objects of type resource and returns a resource.Result.
