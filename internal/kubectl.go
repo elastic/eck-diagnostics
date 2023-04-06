@@ -263,7 +263,7 @@ func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal
 	go func() {
 		defer pipeW.Close()
 		// Simulates "kubectl --ignore-not-found --show-labels --namespace {{namespace}} get {{resource}}"
-		_ := options.Run(c.factory, cmd, []string{resource})
+		_ = options.Run(c.factory, cmd, []string{resource})
 	}()
 
 	// Bridges pipe reader to the writer w with or without filtering.
