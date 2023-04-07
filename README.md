@@ -84,15 +84,15 @@ The ECK related custom resources are included in those namespaces as well:
 * EnterpriseSearch
 * Kibana
 
-### Categories
-Categories are retrieved by simulating `kubectl get --show-labels <category-name>`:
+### Logs
+In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only logs from Pods managed by ECK are collected.
+
+### Category overviews
+Category overviews are retrieved by simulating `kubectl get --show-labels <category-name>`:
 * `elasic` in the workload resource namespaces
 * `all` in the workload resource and operator namespaces
 
 The `all` category may consist of broader resources not managed by ECK, such as CronJob. If you want to limit the scope, use the `-f, --filters` flag.
-
-### Logs
-In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only logs from Pods managed by ECK are collected.
 
 ## Filtering collected resources
 
