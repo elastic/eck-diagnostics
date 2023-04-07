@@ -131,7 +131,9 @@ func Run(params Params) error {
 			},
 		})
 
-		zipFile.Add(getResources(kubectl.GetInHumanReadable, ns, filters.Filters{}, []string{
+		// Filters is intentionally NOT empty here, as label filtering is the last resort
+		// to avoid resources collection unrelated to Elastic such as cronjobs
+		zipFile.Add(getResources(kubectl.GetInHumanReadable, ns, params.Filters, []string{
 			"all",
 		}, "get-%s.txt"))
 
