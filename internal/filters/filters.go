@@ -15,11 +15,18 @@ import (
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
 	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
+	Empty      = Filters{}
 )
 
 // Filters contains a Filter map for each Elastic type given in the filter "source".
 type Filters struct {
-	byType map[string][]Filter
+	byType    map[string][]Filter
+	selectors []labels.Selector
+}
+
+func (f Filters) WithSelectors(selectors []labels.Selector) Filters {
+	f.selectors = append(f.selectors, selectors...)
+	return f
 }
 
 // Empty returns if there are no defined filters.
@@ -39,6 +46,11 @@ func (f Filters) Matches(lbls map[string]string) bool {
 			if filter.Selector.Matches(labels.Set(lbls)) {
 				return true
 			}
+		}
+	}
+	for _, selector := range f.selectors {
+		if selector.Matches(labels.Set(lbls)) {
+			return true
 		}
 	}
 	return false
