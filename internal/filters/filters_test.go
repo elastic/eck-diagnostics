@@ -290,6 +290,7 @@ func TestFilters_Matches(t *testing.T) {
 
 			f := Filters{
 				byType: tt.filterMap,
+				selectors: tt.selectors,
 			}
 			if got := f.MatchesAgainstString(labelsString); got != tt.want {
 				t.Errorf("Filters.MatchesAgainstString() = %v, want %v", got, tt.want)
