@@ -214,8 +214,11 @@ LOOP:
 			},
 		})
 
-		zipFile.Add(getResources(kubectl.GetInHumanReadable, ns, namespaceFilters, []string{
+		zipFile.Add(getResources(kubectl.GetByLabelInHumanReadable, ns, namespaceFilters, []string{
 			"all",
+		}, "get-%s.txt"))
+
+		zipFile.Add(getResources(kubectl.GetByNameInHumanReadable, ns, namespaceFilters, []string{
 			"elastic",
 		}, "get-%s.txt"))
 

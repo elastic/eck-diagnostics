@@ -226,10 +226,49 @@ func (c Kubectl) getFiltered(resource, namespace string, w io.Writer, filter fun
 	return printer.PrintObj(&filtered, w)
 }
 
-// GetInHumanReadable retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// GetByLabelInHumanReadable retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
 // If filters is not empty, this will only return resources within the cluster that its labels match
 // at least one of the filter's label selectors.
-func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+func (c Kubectl) GetByLabelInHumanReadable(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	return c.getFilteredInHumanReadable(resource, namespace, w,
+		func(_ string, labelsColumn string) bool {
+			return filters.MatchesAgainstString(labelsColumn)
+		},
+		filters.Empty())
+}
+
+// GetByNameInHumanReadable retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
+// If filters is not empty, this will only return resources within the cluster that its name matches
+// at least one of the filter's type+name pair.
+func (c Kubectl) GetByNameInHumanReadable(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+	return c.getFilteredInHumanReadable(resource, namespace, w,
+		func(nameColumn string, _ string) bool {
+			// NAME column may be kind.group/name
+			kind, _, name, err := func(s string) (string, string, string, error) {
+
+				kindGroupName := strings.SplitN(s, "/", 2)
+				if len(kindGroupName) != 2 {
+					return "", "", "", fmt.Errorf("'%s' is not kind.group/name", s)
+				}
+
+				kindGroup := strings.SplitN(kindGroupName[0], ".", 2) 
+				if len(kindGroup) != 2 {
+					return "", "", "", fmt.Errorf("'%s' is not kind.group/name", s)
+				}
+
+				return kindGroup[0], kindGroup[1], kindGroupName[1], nil
+			}(nameColumn)
+
+			if err != nil {
+				return filters.Contains(nameColumn, resource)
+			}
+
+			return filters.Contains(name, kind)
+		},
+		filters.Empty())
+}
+
+func (c Kubectl) getFilteredInHumanReadable(resource, namespace string, w io.Writer, filter func(nameColumn, labelsColumn string) bool, skipFilter bool) error {
 	execErrOut := io.Discard
 	if c.verbose {
 		execErrOut = c.errOut
@@ -263,11 +302,11 @@ func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal
 	go func() {
 		defer pipeW.Close()
 		// Simulates "kubectl --ignore-not-found --show-labels --namespace {{namespace}} get {{resource}}"
-		_ = options.Run(c.factory, cmd, []string{resource})
+		_ = options.Run(c.factory, []string{resource})
 	}()
 
 	// Bridges pipe reader to the writer w with or without filtering.
-	if filters.Empty() {
+	if skipFilter {
 		_, err := io.Copy(w, pipeR)
 		return err
 	}
@@ -281,8 +320,10 @@ func (c Kubectl) GetInHumanReadable(resource, namespace string, filters internal
 		case strings.HasPrefix(line, "NAME "):
 			index = strings.LastIndex(line, "LABELS")
 			fmt.Fprintln(w, line)
-		case index > 0 && filters.MatchesAgainstString(line[index:]):
-			fmt.Fprintln(w, line)
+		case index > 0:
+			if filter(strings.SplitN(line, " ", 2)[0], line[index:]) {
+				fmt.Fprintln(w, line)
+			}
 		}
 	}
 	return scanner.Err()

@@ -59,11 +59,18 @@ func (f Filters) Matches(lbls map[string]string) bool {
 // MatchesAgainstString will determine if the given labels string matches
 // any of the Filter's label selectors.
 func (f Filters) MatchesAgainstString(labelsString string) bool {
+	if labelsString == "<none>" {
+		return false
+	}
+
 	pairs := strings.Split(labelsString, ",")
 	labels := make(map[string]string, len(pairs))
 
 	for _, pair := range pairs {
 		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) != 2 {
+			continue // non key-value pair
+		}
 		labels[kv[0]] = kv[1]
 	}
 
