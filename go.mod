@@ -6,7 +6,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/google/go-cmp v0.5.9
 	github.com/spf13/cobra v1.7.0
-	golang.org/x/text v0.9.0
+	golang.org/x/text v0.10.0
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
 	k8s.io/cli-runtime v0.27.2
