@@ -413,7 +413,7 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters i
 		return false, "", err
 	}
 
-	isTLS := false
+	var isTLS bool
 	switch typ {
 	case logstashJob:
 		// Logstash API SSL is not yet configurable via spec.http.tls, try to read the config as a best-effort
@@ -454,7 +454,11 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters i
 			logger.Printf("Skipping %s/%s as elasticsearchRefs is not defined", ns, resourceName)
 			return false, "", nil
 		}
-		esRef := esRefs[0].(map[string]interface{})
+		esRef, ok := esRefs[0].(map[string]interface{})
+		if !ok {
+			logger.Printf("Skipping %s/%s as elasticsearchRefs[0] is invalid", ns, resourceName)
+			return false, "", nil
+		}
 		name, found, err := unstructured.NestedString(esRef, "name")
 		if err != nil {
 			return false, "", err
@@ -464,6 +468,8 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters i
 			return false, "", nil
 		}
 		esName = name
+	default:
+		panic("unknown type while extracting es info")
 	}
 
 	return isTLS, esName, nil
