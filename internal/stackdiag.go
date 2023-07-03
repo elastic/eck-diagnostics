@@ -393,20 +393,19 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 		if err != nil {
 			recordErr(err)
 		}
-		if esName != "" {
-			logger.Print("scheduleJob", "typ ", typ, "es ", esName)
-			recordErr(state.scheduleJob(typ, esName, ressourceInfo.Name, isTLS))
+
+		ressourceName := ressourceInfo.Name
+		if !filters.Empty() && !filters.Contains(ressourceName, typ) {
+			return nil
 		}
+
+		recordErr(state.scheduleJob(typ, esName, ressourceName, isTLS))
 		return nil
 	})
 }
 
 func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters internal_filters.Filters) (bool, string, error) {
 	resourceName := resourceInfo.Name
-
-	if !filters.Empty() && !filters.Contains(resourceName, typ) {
-		return false, "", nil
-	}
 
 	es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(resourceInfo.Object)
 	if err != nil {
@@ -416,8 +415,8 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters i
 	var isTLS bool
 	switch typ {
 	case logstashJob:
-		// Logstash API SSL is not yet configurable via spec.http.tls, try to read the config as a best-effort
-		// To change after https://github.com/elastic/cloud-on-k8s/issues/6971 is fixed.
+		// Logstash API SSL is not yet configurable via spec.http.tls, try to read the config as a best-effort,
+		// to change after https://github.com/elastic/cloud-on-k8s/issues/6971 is fixed.
 		enabled, found, err := unstructured.NestedBool(es, "spec", "config", "api.ssl.enabled")
 		if err != nil {
 			return false, "", err
@@ -447,28 +446,9 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters i
 		}
 		esName = name
 	case logstashJob:
-		esRefs, found, err := unstructured.NestedSlice(es, "spec", "elasticsearchRefs")
-		if err != nil {
-			return false, "", err
-		}
-		if !found || len(esRefs) == 0 {
-			logger.Printf("Skipping %s/%s as elasticsearchRefs is not defined", ns, resourceName)
-			return false, "", nil
-		}
-		esRef, ok := esRefs[0].(map[string]interface{})
-		if !ok {
-			logger.Printf("Skipping %s/%s as elasticsearchRefs[0] is invalid", ns, resourceName)
-			return false, "", nil
-		}
-		name, found, err := unstructured.NestedString(esRef, "name")
-		if err != nil {
-			return false, "", err
-		}
-		if !found || name == "" {
-			logger.Printf("Skipping %s/%s as name is not set in elasticsearchRefs[0]", ns, resourceName)
-			return false, "", nil
-		}
-		esName = name
+		// Logstash doesn't store its credentials in Elastiscearch,
+		// api.auth.* settings not yet supported
+		esName = ""
 	default:
 		panic("unknown type while extracting es info")
 	}

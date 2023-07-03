@@ -15,12 +15,14 @@ spec:
       securityContext:
         runAsUser: 1000
         allowPrivilegeEscalation: false
+      {{ if .ESName }}
       env:
         - name: ES_PW
           valueFrom:
             secretKeyRef:
               name: {{ .ESName }}-es-elastic-user
               key: elastic
+      {{ end }}
       volumeMounts:
         - name: output
           mountPath: {{ .OutputDir }}
@@ -28,7 +30,10 @@ spec:
       args:
         - |
           cd {{ .OutputDir }}
-          /support-diagnostics/diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify -u elastic --passwordText $ES_PW {{if .TLS}}-s --noVerify{{end}} -o .
+          /support-diagnostics/diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify \
+            {{if .ESName}} -u elastic --passwordText $ES_PW{{end}} \
+            {{if .TLS}} -s --noVerify {{end}} \
+            -o .
           touch ready
           while true; do sleep 1; done;
       readinessProbe:
