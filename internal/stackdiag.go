@@ -417,6 +417,7 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters i
 	switch typ {
 	case logstashJob:
 		// Logstash API SSL is not yet configurable via spec.http.tls, try to read the config as a best-effort
+		// To change after https://github.com/elastic/cloud-on-k8s/issues/6971 is fixed.
 		enabled, found, err := unstructured.NestedBool(es, "spec", "config", "api.ssl.enabled")
 		if err != nil {
 			return false, "", err
