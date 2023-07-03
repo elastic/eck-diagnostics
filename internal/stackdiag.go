@@ -44,9 +44,13 @@ const (
 	// names used to identify different stack diagnostic job types (need to match the names of the corresponding CRDs)
 	elasticsearchJob = "elasticsearch"
 	kibanaJob        = "kibana"
+	logstashJob      = "logstash"
 )
 
 var (
+	// supportedStackDiagTypes is the list of stack apps supported by elastic/support-diagnostics
+	supportedStackDiagTypes = []string{elasticsearchJob, kibanaJob, logstashJob}
+
 	//go:embed job.tpl.yml
 	jobTemplate string
 	// jobPollingInterval is used to configure the informer used to be notified of Pod status changes.
@@ -136,7 +140,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 		return err
 	}
 
-	diagnosticType, shortType := diagnosticTypeForApplication(typ)
+	diagnosticType, svcSuffix := diagnosticTypeForApplication(typ)
 
 	buffer := new(bytes.Buffer)
 	err = tpl.Execute(buffer, map[string]interface{}{
@@ -144,7 +148,7 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 		"DiagnosticImage":   ds.diagnosticImage,
 		"Namespace":         ds.ns,
 		"ESName":            esName,
-		"SVCName":           fmt.Sprintf("%s-%s-http", resourceName, shortType),
+		"SVCName":           fmt.Sprintf("%s-%s", resourceName, svcSuffix),
 		"Type":              diagnosticType,
 		"TLS":               tls,
 		"OutputDir":         podOutputDir,
@@ -198,14 +202,16 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	return nil
 }
 
-// diagnosticTypeForApplication returns the diagnosticType as expected by the stack diagnostics tool and a short type
-// matching the shorthand used by ECK in service names for the given application type.
+// diagnosticTypeForApplication returns the diagnosticType as expected by the stack diagnostics tool and the suffix
+// used by ECK in service names for the given application type.
 func diagnosticTypeForApplication(typ string) (string, string) {
 	switch typ {
 	case elasticsearchJob:
-		return "api", "es"
+		return "api", "es-http"
 	case kibanaJob:
-		return "kibana-api", "kb"
+		return "kibana-api", "kb-http"
+	case logstashJob:
+		return "logstash-api", "ls-api"
 	}
 	panic("programming error: unknown type")
 }
@@ -358,13 +364,11 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}, filters internal_filters.Filters) {
 	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
 
-	if err := scheduleJobs(k, ns, zipFile.AddError, state, elasticsearchJob, filters); err != nil {
-		zipFile.AddError(err)
-		return
-	}
-	if err := scheduleJobs(k, ns, zipFile.AddError, state, kibanaJob, filters); err != nil {
-		zipFile.AddError(err)
-		return
+	for _, typ := range supportedStackDiagTypes {
+		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {
+			zipFile.AddError(err)
+			return
+		}
 	}
 	// don't start extracting if there is nothing to do
 	if len(state.jobs) == 0 {
@@ -379,44 +383,88 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 	if err != nil {
 		return err // not recoverable
 	}
-	return resources.Visit(func(info *resource.Info, err error) error {
+	return resources.Visit(func(ressourceInfo *resource.Info, err error) error {
 		if err != nil {
 			// record error but continue trying for other resources
 			recordErr(err)
 		}
 
-		resourceName := info.Name
-		es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(info.Object)
+		isTLS, esName, err := extractEsInfo(typ, ns, ressourceInfo, filters)
 		if err != nil {
 			recordErr(err)
-			return nil
 		}
-		disabled, found, err := unstructured.NestedBool(es, "spec", "http", "tls", "selfSignedCertificate", "disabled")
-		if err != nil {
-			recordErr(err)
-			return nil
+		if esName != "" {
+			logger.Print("scheduleJob", "typ ", typ, "es ", esName)
+			recordErr(state.scheduleJob(typ, esName, ressourceInfo.Name, isTLS))
 		}
-		tls := !(found && disabled)
-
-		if !filters.Empty() && !filters.Contains(resourceName, typ) {
-			return nil
-		}
-
-		esName := resourceName
-		if typ != "elasticsearch" {
-			val, found, err := unstructured.NestedString(es, "spec", "elasticsearchRef", "name")
-			if err != nil {
-				recordErr(err)
-				return nil
-			}
-			if !found || val == "" {
-				logger.Printf("Skipping %s/%s as it it not using elasticsearchRef", ns, resourceName)
-				return nil
-			}
-			esName = val
-		}
-
-		recordErr(state.scheduleJob(typ, esName, resourceName, tls))
 		return nil
 	})
+}
+
+func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters internal_filters.Filters) (bool, string, error) {
+	resourceName := resourceInfo.Name
+
+	if !filters.Empty() && !filters.Contains(resourceName, typ) {
+		return false, "", nil
+	}
+
+	es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(resourceInfo.Object)
+	if err != nil {
+		return false, "", err
+	}
+
+	isTLS := false
+	switch typ {
+	case logstashJob:
+		// Logstash API SSL is not yet configurable via spec.http.tls, try to read the config as a best-effort
+		enabled, found, err := unstructured.NestedBool(es, "spec", "config", "api.ssl.enabled")
+		if err != nil {
+			return false, "", err
+		}
+		isTLS = found && enabled
+
+	default:
+		disabled, found, err := unstructured.NestedBool(es, "spec", "http", "tls", "selfSignedCertificate", "disabled")
+		if err != nil {
+			return false, "", err
+		}
+		isTLS = !(found && disabled)
+	}
+
+	var esName string
+	switch typ {
+	case elasticsearchJob:
+		esName = resourceName
+	case kibanaJob:
+		name, found, err := unstructured.NestedString(es, "spec", "elasticsearchRef", "name")
+		if err != nil {
+			return false, "", err
+		}
+		if !found || name == "" {
+			logger.Printf("Skipping %s/%s as elasticsearchRef is not defined", ns, resourceName)
+			return false, "", nil
+		}
+		esName = name
+	case logstashJob:
+		esRefs, found, err := unstructured.NestedSlice(es, "spec", "elasticsearchRefs")
+		if err != nil {
+			return false, "", err
+		}
+		if !found || len(esRefs) == 0 {
+			logger.Printf("Skipping %s/%s as elasticsearchRefs is not defined", ns, resourceName)
+			return false, "", nil
+		}
+		esRef := esRefs[0].(map[string]interface{})
+		name, found, err := unstructured.NestedString(esRef, "name")
+		if err != nil {
+			return false, "", err
+		}
+		if !found || name == "" {
+			logger.Printf("Skipping %s/%s as name is not set in elasticsearchRefs[0]", ns, resourceName)
+			return false, "", nil
+		}
+		esName = name
+	}
+
+	return isTLS, esName, nil
 }

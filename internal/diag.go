@@ -143,6 +143,7 @@ func Run(params Params) error {
 		"common.k8s.elastic.co/type=beat",              // 1.2.0
 		"common.k8s.elastic.co/type=agent",             // 1.4.0
 		"common.k8s.elastic.co/type=maps",              // 1.6.0
+		"common.k8s.elastic.co/type=logstash",          // 2.8.0
 	}
 
 	selectors := make([]labels.Selector, len(operatorLabels))
@@ -205,6 +206,11 @@ LOOP:
 		if maxOperatorVersion.AtLeast(version.MustParseSemantic("1.6.0")) {
 			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
 				"elasticmapsserver",
+			}))
+		}
+		if maxOperatorVersion.AtLeast(version.MustParseSemantic("2.8.0")) {
+			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
+				"logstash",
 			}))
 		}
 
