@@ -389,7 +389,7 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			recordErr(err)
 		}
 
-		isTLS, esName, err := extractEsInfo(typ, ns, ressourceInfo, filters)
+		isTLS, esName, err := extractEsInfo(typ, ns, ressourceInfo)
 		if err != nil {
 			recordErr(err)
 		}
@@ -404,7 +404,7 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 	})
 }
 
-func extractEsInfo(typ string, ns string, resourceInfo *resource.Info, filters internal_filters.Filters) (bool, string, error) {
+func extractEsInfo(typ string, ns string, resourceInfo *resource.Info) (bool, string, error) {
 	resourceName := resourceInfo.Name
 
 	es, err := runtime.DefaultUnstructuredConverter.ToUnstructured(resourceInfo.Object)
