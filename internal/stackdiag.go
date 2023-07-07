@@ -383,23 +383,23 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 	if err != nil {
 		return err // not recoverable
 	}
-	return resources.Visit(func(ressourceInfo *resource.Info, err error) error {
+	return resources.Visit(func(resourceInfo *resource.Info, err error) error {
 		if err != nil {
 			// record error but continue trying for other resources
 			recordErr(err)
 		}
 
-		isTLS, esName, err := extractEsInfo(typ, ns, ressourceInfo)
+		isTLS, esName, err := extractEsInfo(typ, ns, resourceInfo)
 		if err != nil {
 			recordErr(err)
 		}
 
-		ressourceName := ressourceInfo.Name
-		if !filters.Empty() && !filters.Contains(ressourceName, typ) {
+		resourceName := resourceInfo.Name
+		if !filters.Empty() && !filters.Contains(resourceName, typ) {
 			return nil
 		}
 
-		recordErr(state.scheduleJob(typ, esName, ressourceName, isTLS))
+		recordErr(state.scheduleJob(typ, esName, resourceName, isTLS))
 		return nil
 	})
 }
