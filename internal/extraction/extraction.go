@@ -34,7 +34,7 @@ type RemoteSource struct {
 func (j *RemoteSource) sourceDirPrefix() string {
 	prefix := "api-diagnostics"
 	switch j.Typ {
-	case "kibana":
+	case "kibana", "logstash":
 		prefix = fmt.Sprintf("%s-%s", j.Typ, prefix)
 	case "agent":
 		prefix = ""

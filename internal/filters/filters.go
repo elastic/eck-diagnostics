@@ -14,7 +14,7 @@ import (
 
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
-	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps"}
+	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps", "logstash"}
 	Empty      = Filters{}
 )
 
