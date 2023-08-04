@@ -22,7 +22,7 @@ spec:
       repository: elastic/eck-diagnostics
       pipeline_file: ".buildkite/pipeline.yml"
       teams:
-        # your-team:
-        #  access_level: MANAGE_BUILD_AND_READ
+        cloud-k8s-operator:
+          access_level: MANAGE_BUILD_AND_READ
         everyone:
           access_level: READ_ONLY
