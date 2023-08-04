@@ -1,0 +1,7 @@
+---
+steps:
+  - label: "Test"
+    command: "true"
+
+  - label: "Build"
+    command: "true"
