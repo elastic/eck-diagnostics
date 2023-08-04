@@ -3,42 +3,54 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 
 SHELL := /bin/bash
-export VERSION ?= 1.1.0
-export GOBIN = $(shell pwd)/bin
+export GOBIN 	 = $(shell pwd)/bin
 
-SNAPSHOT  ?= true
-SHA1      ?= $(shell git rev-parse --short=8 --verify HEAD)
+export VERSION 	?= $(shell cat VERSION)
+export SNAPSHOT ?= true
+export SHA1     ?= $(shell git rev-parse --short=8 --verify HEAD)
 
-LDFLAGS ?= -X github.com/elastic/eck-diagnostics/internal.buildVersion=$(VERSION) \
+GO_LDFLAGS := -X github.com/elastic/eck-diagnostics/internal.buildVersion=$(VERSION) \
 	-X github.com/elastic/eck-diagnostics/internal.buildHash=$(SHA1) \
-	-X github.com/elastic/eck-diagnostics/internal.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')) \
+	-X github.com/elastic/eck-diagnostics/internal.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ') \
 	-X github.com/elastic/eck-diagnostics/internal.snapshotBuild=$(SNAPSHOT)
 
-all: $(GOBIN)/eck-diagnostics NOTICE.txt
+lint: $(GOBIN)/golangci-lint
+	$(GOBIN)/golangci-lint run
 
-# build
-$(GOBIN)/eck-diagnostics:
-	@ GCO_ENABLED=0 go build \
-		-mod=readonly \
-		-ldflags="$(LDFLAGS)" github.com/elastic/eck-diagnostics/cmd \
-		-o $(GOBIN)/eck-diagnostics
+unit-tests:
+	go test -v ./...
 
-NOTICE.txt: $(GOBIN)/go-licence-detector
+GOOS   ?= darwin linux windows
+GOARCH ?= amd64 arm64
+
+build-binary:
+	@ for os in $(GOOS); do \
+		for arch in $(GOARCH); do \
+			echo "-- build bin/eck-diagnostics-$${os}-$${arch}"; \
+			GCO_ENABLED=0 GOOS=$${os} GOARCH=$${arch} go build \
+				-mod readonly \
+				-ldflags "$(GO_LDFLAGS)" -a \
+				-o bin/eck-diagnostics-$${os}-$${arch} \
+				github.com/elastic/eck-diagnostics/cmd \
+			; \
+		done \
+	done
+
+build-image:
+	drivah build .
+
+build-push-image:
+	drivah build . --push
+
+generate-notice.txt: $(GOBIN)/go-licence-detector
 	@ go list -m -json all | $(GOBIN)/go-licence-detector \
  		-noticeTemplate=build/notice/NOTICE.txt.tpl \
  		-noticeOut=NOTICE.txt \
  		-overrides=build/notice/overrides.json \
  		-includeIndirect
 
-.PHONY: unit
-unit: lint
-	@ go test -v ./...
-
-.PHONY: lint
-lint: $(GOBIN)/golangci-lint
-	@ $(GOBIN)/golangci-lint run
-
 # tool dependencies
+
 $(GOBIN)/go-licence-detector:
 	@ go install go.elastic.co/go-licence-detector@v0.3.0
 
