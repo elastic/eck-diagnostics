@@ -30,7 +30,7 @@ build-binary:
 			GCO_ENABLED=0 GOOS=$${os} GOARCH=$${arch} go build \
 				-mod readonly \
 				-ldflags "$(GO_LDFLAGS)" -a \
-				-o bin/eck-diagnostics-$${os}-$${arch} \
+				-o artefacts/eck-diagnostics-$${os}-$${arch} \
 				github.com/elastic/eck-diagnostics/cmd \
 			; \
 		done \

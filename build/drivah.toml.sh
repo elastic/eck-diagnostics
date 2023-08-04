@@ -6,17 +6,24 @@
 
 set -eu
 
+ROOT="$(cd "$(dirname "$0")"; pwd)/.."
+
+SNAPSHOT="${SNAPSHOT:-true}"
+SHA1="${BUILDKITE_COMMIT:-$SHA1}"
+VERSION="${VERSION:-$(cat "$ROOT/VERSION")}"
+
 tag() {
-    tag="$VERSION"
-    if [[ "$SNAPSHOT" == "true" ]]; then
-        tag="$tag-SNAPSHOT"
+    tag="$VERSION-SNAPSHOT"
+    if [[ "${BUILDKITE_TAG:-}" != "" ]]; then
+        SNAPSHOT=""
+        tag="$VERSION"
     fi
     echo "$tag"
 }
 
 cat <<EOF
 [container.image]
-names = ["docker.elastic.co/eck-dev/eck-diagnostics"]
+names = ["docker.elastic.co/eck/eck-diagnostics"]
 tags = ["latest", "$SHA1", "$(tag)"]
 build_context = ".."
 
