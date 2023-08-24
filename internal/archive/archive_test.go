@@ -41,7 +41,7 @@ func Test_rootDir(t *testing.T) {
 			args: args{
 				"version.txt",
 			},
-			want: "",
+			want: "/",
 		},
 	}
 	for _, tt := range tests {
