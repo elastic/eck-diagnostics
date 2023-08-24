@@ -28,9 +28,14 @@ func RootDir(name string) string {
 	if len(name) == 0 {
 		return name
 	}
+
 	i := 1
 	for i < len(name) && name[i] != archivePathSeparator {
 		i++
+	}
+	// cover case where name is not a directory at all
+	if i == len(name) && name[0] != archivePathSeparator {
+		return ""
 	}
 	return name[0:i]
 }

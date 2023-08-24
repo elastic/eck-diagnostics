@@ -36,6 +36,13 @@ func Test_rootDir(t *testing.T) {
 			},
 			want: "/dir",
 		},
+		{
+			name: "not a dir",
+			args: args{
+				"version.txt",
+			},
+			want: "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
