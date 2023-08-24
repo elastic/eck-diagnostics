@@ -52,5 +52,5 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.VERSION }}
           BUILD_DATE: ${{ steps.get_build_date.outputs.BUILD_DATE }}
         with:
-          version: latest
+          version: v1.18.2
           args: release --rm-dist
