@@ -121,3 +121,8 @@ The following resources are returned unfiltered:
 * PersistentVolume
 * ServiceAccount
 * Secret (metadata only)
+
+
+### Using custom ECK installation methods
+
+If you are using your own installation manifests or Helm chart make sure the metadata on the Pods running the operator matches the metadata used by Elastic's official installation manifests. Specifically ensure that you have a `control-plane: elastic-operator` label on the ECK operator StatefulSet or Deployment and its Pods. This ensures that eck-diagnostics can successfully extract logs and version information from those Pods.

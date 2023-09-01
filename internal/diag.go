@@ -244,18 +244,21 @@ LOOP:
 
 // getOperatorLabel will attempt to find the labels associated with the ECK Operator, returning any errors.
 //
-// 1) if using yaml manifests it will always be "control-plane=elastic-operator"
+// 1) if using yaml manifests or OLM it will always be "control-plane=elastic-operator"
 // 2) if using Helm, find label with key: helm.sh/chart, and value containing "eck-operator-*"
 func getOperatorLabel(kc *Kubectl, ns string) (labels.Set, error) {
+	// try the most common case first pure YAML and OLM installations will have this label
+	pods, err := kc.Clientset.CoreV1().Pods(ns).List(context.Background(), v1.ListOptions{LabelSelector: "control-plane=elastic-operator"})
+	if err == nil && len(pods.Items) > 0 {
+		return labels.Set{"control-plane": "elastic-operator"}, nil
+	}
+	// for Helm use the service account to be independent of Deployment or StatefulSet (even though all Helm installs should use a StatefulSet)
 	saList, err := kc.Clientset.CoreV1().ServiceAccounts(ns).List(context.Background(), v1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("while retrieving list of serviceaccounts in ns '%s': %w", ns, err)
 	}
 	for _, sa := range saList.Items {
 		for k, v := range sa.Labels {
-			if k == "control-plane" && v == "elastic-operator" {
-				return labels.Set{"control-plane": "elastic-operator"}, nil
-			}
 			if k == "helm.sh/chart" && strings.Contains(v, "eck-operator") {
 				// The helm.sh/chart=eck-operator-* label isn't propagated down to sub-resources
 				// so use the app.kubernetes.io/name label, which is propagated.
@@ -263,7 +266,7 @@ func getOperatorLabel(kc *Kubectl, ns string) (labels.Set, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("unable to find serviceaccount corresponding to eck operator")
+	return nil, fmt.Errorf("unable to find any resources belonging to the eck operator")
 }
 
 // addDiagnosticLogToArchive adds the passed bytes.Buffer reference as eck-diagnostics.log to the given archive.
