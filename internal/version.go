@@ -6,6 +6,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -114,7 +115,21 @@ func extractVersionFromDeployment(c *kubernetes.Clientset, namespace string) *ve
 		logger.Println(fmt.Errorf("operator statefulset not found, checking for OLM deployment but failed: %w", err).Error())
 		return fallbackMaxVersion
 	}
-	return extractVersionFromContainers(deployment.Spec.Template.Spec.Containers)
+	v, err := extractVersionFromOLMMetadata(deployment.Labels)
+	if err != nil {
+		logger.Println("ECK operator not found in OLM metadata checking container image as last resort")
+		return extractVersionFromContainers(deployment.Spec.Template.Spec.Containers)
+	}
+	return v
+}
+
+func extractVersionFromOLMMetadata(labels map[string]string) (*version.Version, error) {
+	if val, ok := labels["olm.owner"]; ok {
+		if _, v, found := strings.Cut(val, "."); found {
+			return version.ParseSemantic(v)
+		}
+	}
+	return nil, errors.New("no OLM metadata found")
 }
 
 // extractVersionFromDockerImage parses the version tag out of the given Docker image identifier.
