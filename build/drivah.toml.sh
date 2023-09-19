@@ -10,24 +10,27 @@ ROOT="$(cd "$(dirname "$0")"; pwd)/.."
 
 SNAPSHOT="${SNAPSHOT:-true}"
 SHA1="${BUILDKITE_COMMIT:-$SHA1}"
+SHA1="${SHA1:0:8}"
 VERSION="${VERSION:-$(cat "$ROOT/VERSION")}"
 
-tag() {
-    tag="$VERSION-SNAPSHOT"
-    if [[ "${BUILDKITE_TAG:-}" != "" ]]; then
-        SNAPSHOT=""
-        tag="$VERSION"
-    fi
-    echo "$tag"
-}
+IMAGE_NAME="${IMAGE_NAME:-docker.elastic.co/eck/diagnostics}"
+IMAGE_TAG="$VERSION-SNAPSHOT"
+
+# relies on BUILDKITE_TAG to set SNAPSHOT/IMAGE_TAG
+if [[ "${BUILDKITE_TAG:-}" != "" ]]; then
+    SNAPSHOT="false"
+    IMAGE_TAG="$VERSION"
+fi
 
 cat <<EOF
 [container.image]
-names = ["docker.elastic.co/eck/eck-diagnostics"]
-tags = ["latest", "$SHA1", "$(tag)"]
+names = ["${IMAGE_NAME}"]
+tags = ["${IMAGE_TAG}"]
 build_context = ".."
 
 [container.image.build_args]
+IMAGE_TAG = "${IMAGE_TAG}"
+IMAGE_NAME = "${IMAGE_NAME}"
 VERSION = "${VERSION}"
 SHA1 = "${SHA1}"
 SNAPSHOT = "${SNAPSHOT}"
