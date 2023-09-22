@@ -5,9 +5,9 @@
 SHELL := /bin/bash
 export GOBIN 	 = $(shell pwd)/bin
 
-export VERSION 	?= $(shell cat VERSION)
 export SNAPSHOT ?= true
 export SHA1     ?= $(shell git rev-parse --short=8 --verify HEAD)
+export VERSION  ?= $(SHA1)
 
 GO_LDFLAGS := -X github.com/elastic/eck-diagnostics/internal.buildVersion=$(VERSION) \
 	-X github.com/elastic/eck-diagnostics/internal.buildHash=$(SHA1) \
@@ -26,7 +26,7 @@ GOARCH ?= amd64 arm64
 build-binary:
 	@ for os in $(GOOS); do \
 		for arch in $(GOARCH); do \
-			echo "-- build bin/eck-diagnostics-$${os}-$${arch}"; \
+			echo "-- build artefacts/eck-diagnostics-$${os}-$${arch}"; \
 			GCO_ENABLED=0 GOOS=$${os} GOARCH=$${arch} go build \
 				-mod readonly \
 				-ldflags "$(GO_LDFLAGS)" -a \
