@@ -8,14 +8,14 @@ steps:
   - label: "lint"
     command: make lint
     agents:
-      image: "golang:1.20.6"
+      image: "golang:1.21.1"
       cpu: "4"
       memory: "8G"
 
   - label: "test"
     command: make unit-tests
     agents:
-      image: "golang:1.20.6"
+      image: "golang:1.21.1"
       cpu: "4"
       memory: "4G"
 
