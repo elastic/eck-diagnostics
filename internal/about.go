@@ -4,6 +4,8 @@
 
 package internal
 
+import "fmt"
+
 var (
 	buildVersion  string
 	buildDate     string
@@ -19,11 +21,10 @@ type DiagnosticsVersion struct {
 }
 
 func Version() string {
-	v := buildVersion
 	if snapshotBuild == "true" {
-		v += "-SNAPSHOT"
+		return fmt.Sprintf("%s-SNAPSHOT", buildVersion)
 	}
-	return v
+	return fmt.Sprintf("%s (%s)", buildVersion, buildHash)
 }
 
 func about() DiagnosticsVersion {

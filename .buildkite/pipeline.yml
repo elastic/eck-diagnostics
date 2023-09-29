@@ -1,7 +1,31 @@
----
-steps:
-  - label: "Test"
-    command: "true"
 
-  - label: "Build"
-    command: "true"
+env:
+  DOCKER_REGISTRY_VAULT_PATH: secret/ci/elastic-cloud-on-k8s/docker-registry-elastic
+  DOCKER_REGISTRY_HOSTNAME: docker.elastic.co
+
+steps:
+
+  - label: "lint"
+    command: make lint
+    agents:
+      image: "golang:1.20.6"
+      cpu: "4"
+      memory: "8G"
+
+  - label: "test"
+    command: make unit-tests
+    agents:
+      image: "golang:1.20.6"
+      cpu: "4"
+      memory: "4G"
+
+  - label: "publish-image"
+    commands:
+      #- .buildkite/registry-login.sh
+      #- drivah build --push .
+      - drivah build .
+    agents:
+      image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
+      cpu: "4"
+      memory: "4G"
+      ephemeralStorage: "20G"
