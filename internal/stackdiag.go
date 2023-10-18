@@ -15,9 +15,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/elastic/eck-diagnostics/internal/archive"
-	"github.com/elastic/eck-diagnostics/internal/extraction"
-	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/ghodss/yaml"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -33,10 +30,14 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/util/podutils"
 	"k8s.io/utils/ptr"
+
+	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/extraction"
+	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 )
 
 const (
-	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.4.3"
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.5.0"
 
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "stack-diagnostics"
