@@ -20,7 +20,8 @@ spec:
       name: eck-diagnostics
     spec:
       repository: elastic/eck-diagnostics
-      pipeline_file: ".buildkite/pipeline.yml"
+      provider_settings:
+        build_tags: true
       teams:
         cloud-k8s-operator:
           access_level: MANAGE_BUILD_AND_READ
