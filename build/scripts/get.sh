@@ -5,7 +5,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-# Script to copy the eck-diagnostics binary  in the current directory from the container image.
+# Script to copy the eck-diagnostics binary in the current directory from the container image.
 # It is intended to be displayed on stdout and piped into sh.
 
 set -eu
