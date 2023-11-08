@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/google/go-cmp v0.6.0
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.0
 	golang.org/x/text v0.14.0
 	k8s.io/api v0.28.3
 	k8s.io/apimachinery v0.28.3
