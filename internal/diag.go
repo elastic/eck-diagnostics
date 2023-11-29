@@ -208,7 +208,7 @@ LOOP:
 				"elasticmapsserver",
 			}))
 		}
-		if maxOperatorVersion.AtLeast(version.MustParseSemantic("2.8.0")) {
+		if maxOperatorVersion.AtLeast(logstashMinVersion) {
 			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
 				"logstash",
 			}))
@@ -223,7 +223,17 @@ LOOP:
 		getLogs(kubectl, zipFile, ns, namespaceFilters, logsLabels...)
 
 		if params.RunStackDiagnostics {
-			runStackDiagnostics(kubectl, ns, zipFile, params.Verbose, params.DiagnosticImage, params.StackDiagnosticsTimeout, stopCh, namespaceFilters)
+			runStackDiagnostics(
+				kubectl,
+				ns,
+				zipFile,
+				params.Verbose,
+				params.DiagnosticImage,
+				params.StackDiagnosticsTimeout,
+				stopCh,
+				namespaceFilters,
+				maxOperatorVersion,
+			)
 		}
 
 		if params.RunAgentDiagnostics {

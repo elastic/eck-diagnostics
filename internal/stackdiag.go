@@ -15,12 +15,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/elastic/eck-diagnostics/internal/archive"
-	"github.com/elastic/eck-diagnostics/internal/extraction"
-	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/ghodss/yaml"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,15 +26,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/util/podutils"
 	"k8s.io/utils/ptr"
+
+	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/extraction"
+	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 )
 
 const (
-	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.4.3"
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:8.5.0"
 
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "stack-diagnostics"
@@ -48,14 +51,23 @@ const (
 )
 
 var (
-	// supportedStackDiagTypes is the list of stack apps supported by elastic/support-diagnostics
-	supportedStackDiagTypes = []string{elasticsearchJob, kibanaJob, logstashJob}
-
 	//go:embed job.tpl.yml
 	jobTemplate string
 	// jobPollingInterval is used to configure the informer used to be notified of Pod status changes.
 	jobPollingInterval = 10 * time.Second
+
+	// logstashMinVersion is the ECK version in which Logstash support has been introduced.
+	logstashMinVersion = version.MustParseSemantic("2.8.0")
 )
+
+// supportedStackDiagTypes returns the list of stack apps supported by elastic/support-diagnostics.
+func supportedStackDiagTypesFor(eckVersion *version.Version) []string {
+	supportedStackDiagTypes := []string{elasticsearchJob, kibanaJob}
+	if eckVersion.AtLeast(logstashMinVersion) {
+		supportedStackDiagTypes = append(supportedStackDiagTypes, logstashJob)
+	}
+	return supportedStackDiagTypes
+}
 
 // diagJob represents a pod whose job it is to extract diagnostic data from an Elasticsearch cluster.
 type diagJob struct {
@@ -361,10 +373,19 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
-func runStackDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}, filters internal_filters.Filters) {
+func runStackDiagnostics(
+	k *Kubectl, ns string,
+	zipFile *archive.ZipFile,
+	verbose bool,
+	image string,
+	jobTimeout time.Duration,
+	stopCh chan struct{},
+	filters internal_filters.Filters,
+	eckVersion *version.Version,
+) {
 	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
 
-	for _, typ := range supportedStackDiagTypes {
+	for _, typ := range supportedStackDiagTypesFor(eckVersion) {
 		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {
 			zipFile.AddError(err)
 			return
