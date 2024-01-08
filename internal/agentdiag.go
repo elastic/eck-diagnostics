@@ -18,6 +18,9 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
+// based on eck-operator code the agent container name is constant "agent"
+const agentContainerName = "agent"
+
 func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, stopCh chan struct{}, filters internal_filters.Filters) {
 	outputFile := time.Now().Format("eck-agent-diag-2006-01-02T15-04-05Z.zip")
 	resources, err := k.getResourcesMatching("pod", ns, "common.k8s.elastic.co/type=agent")
@@ -65,7 +68,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		needsCleanup := diagnosticForAgentPod(nsn, k, outputFile, zipFile, verbose)
 
 		// no matter what happened: try to clean up the diagnostic archive in the agent container
-		if err := k.Exec(nsn, "rm", outputFile); err != nil {
+		if err := k.Exec(nsn, agentContainerName, "rm", outputFile); err != nil {
 			// but only report any errors during cleaning up if there is a likelihood that we created an archive to clean up
 			// in the first place
 			if needsCleanup {
@@ -83,12 +86,12 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 // the containers file system.
 func diagnosticForAgentPod(nsn types.NamespacedName, k *Kubectl, outputFile string, zipFile *archive.ZipFile, verbose bool) bool {
 	logger.Printf("Extracting agent diagnostics for %s", nsn)
-	if err := k.Exec(nsn, "elastic-agent", "diagnostics", "collect", "-f", outputFile); err != nil {
+	if err := k.Exec(nsn, agentContainerName, "elastic-agent", "diagnostics", "collect", "-f", outputFile); err != nil {
 		zipFile.AddError(fmt.Errorf("while extracting agent diagnostics: %w", err))
 		return false
 	}
 
-	reader, err := k.Copy(nsn, "agent", outputFile, zipFile.AddError)
+	reader, err := k.Copy(nsn, agentContainerName, outputFile, zipFile.AddError)
 	if err != nil {
 		zipFile.AddError(err)
 		return true

@@ -135,7 +135,7 @@ func (c Kubectl) Copy(nsn types.NamespacedName, container string, path string, r
 	return reader, nil
 }
 
-func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
+func (c Kubectl) Exec(nsn types.NamespacedName, containerName string, cmd ...string) error {
 	execErrOut := io.Discard
 	if c.verbose {
 		execErrOut = c.errOut
@@ -148,8 +148,9 @@ func (c Kubectl) Exec(nsn types.NamespacedName, cmd ...string) error {
 				ErrOut: execErrOut,
 			},
 
-			Namespace: nsn.Namespace,
-			PodName:   nsn.Name,
+			Namespace:     nsn.Namespace,
+			PodName:       nsn.Name,
+			ContainerName: containerName,
 		},
 		Config:    c.config,
 		PodClient: c.CoreV1(),
