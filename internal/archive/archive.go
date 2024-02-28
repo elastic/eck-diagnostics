@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/util/errors"
 )
@@ -62,6 +63,17 @@ func NewZipFile(fileName string, version string, log *log.Logger) (*ZipFile, err
 		manifest:   NewDiagnosticManifest(version),
 		log:        log,
 	}, nil
+}
+
+// Create adds a file to the zip file using the provided name similarly to https://pkg.go.dev/archive/zip#Writer.Create,
+// with the addition of the file modification time set to now.
+func (z *ZipFile) Create(filename string) (io.Writer, error) {
+	header := &zip.FileHeader{
+		Name:     filename,
+		Method:   zip.Deflate,
+		Modified: time.Now(),
+	}
+	return z.CreateHeader(header)
 }
 
 // Close closes the zip.Writer and the underlying file.
