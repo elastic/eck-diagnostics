@@ -20,8 +20,8 @@ lint: $(GOBIN)/golangci-lint
 unit-tests:
 	go test -v ./...
 
-GOOS   ?= darwin
-GOARCH ?= amd64
+GOOS   ?= darwin linux windows
+GOARCH ?= amd64 arm64
 
 build-binary:
 	@ for os in $(GOOS); do \
