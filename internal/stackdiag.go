@@ -435,8 +435,8 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 		if esUsername == "" && esPassword == "" {
 			esSecretName, esSecretKey, err = determineESCredentialsSecret(k, ns, esName)
 			if err != nil {
-				recordErr(err)
-				return nil
+				// If no credentials secret was found, and no credentials were provided, this is a fatal error.
+				panic(fmt.Errorf("while determining Elasticsearch credentials secret since no credentials were provided: %w", err))
 			}
 		}
 
