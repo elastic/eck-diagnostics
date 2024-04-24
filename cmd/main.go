@@ -46,6 +46,8 @@ func main() {
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
 	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostics-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
+	cmd.Flags().StringVarP(&diagParams.ESUsername, "es-username", "u", "", "Optional Elasticsearch username for authentication (defaults to 'elastic' user)")
+	cmd.Flags().StringVarP(&diagParams.ESPassword, "es-password", "p", "", "Optional Elasticsearch password for authentication (defaults to 'elastic' user password)")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
 	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")

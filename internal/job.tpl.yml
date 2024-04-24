@@ -15,13 +15,20 @@ spec:
       securityContext:
         runAsUser: 1000
         allowPrivilegeEscalation: false
-      {{ if .ESName }}
+      {{ if and (and .ESSecretName .ESSecretKey) (not (and .ESUsername .ESPassword)) }}
       env:
         - name: ES_PW
           valueFrom:
             secretKeyRef:
-              name: {{ .ESName }}-es-elastic-user
-              key: elastic
+              name: {{ .ESSecretName }}
+              key: {{ .ESSecretKey }}
+      {{ end }}
+      {{ if and .ESUsername .ESPassword }}
+      env:
+        - name: ES_USERNAME
+          value: {{ .ESUsername }}
+        - name: ES_PASSWORD
+          value: {{ .ESPassword }}
       {{ end }}
       volumeMounts:
         - name: output
@@ -31,7 +38,8 @@ spec:
         - |
           cd {{ .OutputDir }}
           /support-diagnostics/diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify \
-            {{if .ESName}} -u elastic --passwordText $ES_PW{{end}} \
+            {{if and (and .ESSecretName .ESSecretKey) (not (and .ESUsername .ESPassword))}} -u {{ .ESSecretKey }} --passwordText $ES_PW{{end}} \
+            {{if and .ESUsername .ESPassword}} -u $ES_USERNAME --passwordText $ES_PASSWORD{{end}} \
             {{if .TLS}} -s --noVerify {{end}} \
             -o .
           touch ready

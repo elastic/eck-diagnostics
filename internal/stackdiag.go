@@ -145,7 +145,7 @@ func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, jobTimeo
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
-func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) error {
+func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, esUsername, esPassword, resourceName string, tls bool) error {
 	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
 	tpl, err := template.New("job").Parse(jobTemplate)
 	if err != nil {
@@ -155,17 +155,23 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	diagnosticType, svcSuffix := diagnosticTypeForApplication(typ)
 
 	buffer := new(bytes.Buffer)
-	err = tpl.Execute(buffer, map[string]interface{}{
+	data := map[string]interface{}{
 		"PodName":           podName,
 		"DiagnosticImage":   ds.diagnosticImage,
 		"Namespace":         ds.ns,
-		"ESName":            esName,
+		"ESSecretName":      esSecretName,
+		"ESSecretKey":       esSecretKey,
 		"SVCName":           fmt.Sprintf("%s-%s", resourceName, svcSuffix),
 		"Type":              diagnosticType,
 		"TLS":               tls,
 		"OutputDir":         podOutputDir,
 		"MainContainerName": podMainContainerName,
-	})
+	}
+	if esUsername != "" && esPassword != "" {
+		data["ESUsername"] = esUsername
+		data["ESPassword"] = esPassword
+	}
+	err = tpl.Execute(buffer, data)
 	if err != nil {
 		return err
 	}
@@ -382,11 +388,13 @@ func runStackDiagnostics(
 	stopCh chan struct{},
 	filters internal_filters.Filters,
 	eckVersion *version.Version,
+	esUsername string,
+	esPassword string,
 ) {
 	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
 
 	for _, typ := range supportedStackDiagTypesFor(eckVersion) {
-		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {
+		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters, esUsername, esPassword); err != nil {
 			zipFile.AddError(err)
 			return
 		}
@@ -399,7 +407,7 @@ func runStackDiagnostics(
 }
 
 // scheduleJobs lists all resources of type typ and schedules a diagnostic job for each of them
-func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internal_filters.Filters) error {
+func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internal_filters.Filters, esUsername, esPassword string) error {
 	resources, err := k.getResources(typ, ns)
 	if err != nil {
 		return err // not recoverable
@@ -420,7 +428,19 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			return nil
 		}
 
-		recordErr(state.scheduleJob(typ, esName, resourceName, isTLS))
+		// If the Elasticsearch credentials are not provided, we need to determine the secret name and key to use.
+		var (
+			esSecretName, esSecretKey string
+		)
+		if esUsername == "" && esPassword == "" {
+			esSecretName, esSecretKey, err = determineESCredentialsSecret(k, ns, esName)
+			if err != nil {
+				recordErr(err)
+				return nil
+			}
+		}
+
+		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, esUsername, esPassword, resourceName, isTLS))
 		return nil
 	})
 }
@@ -475,4 +495,25 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info) (bool, st
 	}
 
 	return isTLS, esName, nil
+}
+
+// determineESCredentialsSecret returns the name of the secret containing the Elasticsearch credentials attempting
+// first to use the "elastic" user secret, and then attempting to use the newer "elastic-internal-diagnostics" user
+// and returning an error if either cannot be found, or the "elastic-internal-diagnostics" user does not have the
+// expected key.
+func determineESCredentialsSecret(k *Kubectl, ns, esName string) (secretName, secretKey string, err error) {
+	elasticSecretName := fmt.Sprintf("%s-es-elastic-user", esName)
+	if _, err := k.CoreV1().Secrets(ns).Get(context.Background(), elasticSecretName, metav1.GetOptions{}); err == nil {
+		return elasticSecretName, "elastic", nil
+	}
+
+	diagnosticUserSecretName := fmt.Sprintf("%s-es-internal-users", esName)
+	secret, err := k.CoreV1().Secrets(ns).Get(context.Background(), diagnosticUserSecretName, metav1.GetOptions{})
+	if err == nil {
+		if _, ok := secret.Data["elastic-internal-diagnostics"]; ok {
+			return diagnosticUserSecretName, "elastic-internal-diagnostics", nil
+		}
+	}
+
+	return "", "", fmt.Errorf("no credentials secret found for Elasticsearch %s", esName)
 }
