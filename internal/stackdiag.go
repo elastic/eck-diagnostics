@@ -486,21 +486,21 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info) (bool, st
 }
 
 // determineESCredentialsSecret returns the name of the secret containing the Elasticsearch credentials attempting
-// first to use the "elastic" user secret, and then attempting to use the newer "elastic-internal-diagnostics" user
+// first to use the "elastic-internal-diagnostics" user secret, and then attempting to use the "elastic" user
 // and returning an error if either cannot be found, or the "elastic-internal-diagnostics" user does not have the
 // expected key.
 func determineESCredentialsSecret(k *Kubectl, ns, esName string) (secretName, secretKey string, err error) {
-	elasticSecretName := fmt.Sprintf("%s-es-elastic-user", esName)
-	if _, err := k.CoreV1().Secrets(ns).Get(context.Background(), elasticSecretName, metav1.GetOptions{}); err == nil {
-		return elasticSecretName, "elastic", nil
-	}
-
 	diagnosticUserSecretName := fmt.Sprintf("%s-es-internal-users", esName)
 	secret, err := k.CoreV1().Secrets(ns).Get(context.Background(), diagnosticUserSecretName, metav1.GetOptions{})
 	if err == nil {
 		if _, ok := secret.Data["elastic-internal-diagnostics"]; ok {
 			return diagnosticUserSecretName, "elastic-internal-diagnostics", nil
 		}
+	}
+
+	elasticSecretName := fmt.Sprintf("%s-es-elastic-user", esName)
+	if _, err := k.CoreV1().Secrets(ns).Get(context.Background(), elasticSecretName, metav1.GetOptions{}); err == nil {
+		return elasticSecretName, "elastic", nil
 	}
 
 	return "", "", fmt.Errorf("no credentials secret found for Elasticsearch %s", esName)
