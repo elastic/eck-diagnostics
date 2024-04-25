@@ -46,8 +46,6 @@ type Params struct {
 	Verbose                 bool
 	StackDiagnosticsTimeout time.Duration
 	Filters                 filters.Filters
-	ESUsername              string
-	ESPassword              string
 }
 
 // AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
@@ -235,8 +233,6 @@ LOOP:
 				stopCh,
 				namespaceFilters,
 				maxOperatorVersion,
-				params.ESUsername,
-				params.ESPassword,
 			)
 		}
 

@@ -145,7 +145,7 @@ func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, jobTimeo
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
-func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, esUsername, esPassword, resourceName string, tls bool) error {
+func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName string, tls bool) error {
 	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
 	tpl, err := template.New("job").Parse(jobTemplate)
 	if err != nil {
@@ -166,10 +166,6 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, esUsername, 
 		"TLS":               tls,
 		"OutputDir":         podOutputDir,
 		"MainContainerName": podMainContainerName,
-	}
-	if esUsername != "" && esPassword != "" {
-		data["ESUsername"] = esUsername
-		data["ESPassword"] = esPassword
 	}
 	err = tpl.Execute(buffer, data)
 	if err != nil {
@@ -267,7 +263,7 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 				logger.Printf("Diagnostic pod %s/%s added\n", pod.Namespace, pod.Name)
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(_, newObj interface{}) {
 			pod, ok := newObj.(*corev1.Pod)
 			if !ok {
 				logger.Printf("Unexpected %v, expected type Pod\n", newObj)
@@ -388,13 +384,11 @@ func runStackDiagnostics(
 	stopCh chan struct{},
 	filters internal_filters.Filters,
 	eckVersion *version.Version,
-	esUsername string,
-	esPassword string,
 ) {
 	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
 
 	for _, typ := range supportedStackDiagTypesFor(eckVersion) {
-		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters, esUsername, esPassword); err != nil {
+		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {
 			zipFile.AddError(err)
 			return
 		}
@@ -407,7 +401,7 @@ func runStackDiagnostics(
 }
 
 // scheduleJobs lists all resources of type typ and schedules a diagnostic job for each of them
-func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internal_filters.Filters, esUsername, esPassword string) error {
+func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internal_filters.Filters) error {
 	resources, err := k.getResources(typ, ns)
 	if err != nil {
 		return err // not recoverable
@@ -428,19 +422,13 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			return nil
 		}
 
-		// If the Elasticsearch credentials are not provided, we need to determine the secret name and key to use.
-		var (
-			esSecretName, esSecretKey string
-		)
-		if esUsername == "" && esPassword == "" {
-			esSecretName, esSecretKey, err = determineESCredentialsSecret(k, ns, esName)
-			if err != nil {
-				// If no credentials secret was found, and no credentials were provided, this is a fatal error.
-				panic(fmt.Errorf("while determining Elasticsearch credentials secret since no credentials were provided: %w", err))
-			}
+		esSecretName, esSecretKey, err := determineESCredentialsSecret(k, ns, esName)
+		if err != nil {
+			// If no credentials secret was found this is a fatal error.
+			panic(fmt.Errorf("while determining Elasticsearch credentials secret: %w", err))
 		}
 
-		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, esUsername, esPassword, resourceName, isTLS))
+		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, isTLS))
 		return nil
 	})
 }
