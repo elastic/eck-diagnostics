@@ -48,6 +48,8 @@ const (
 	elasticsearchJob = "elasticsearch"
 	kibanaJob        = "kibana"
 	logstashJob      = "logstash"
+
+	diagnosticsUsername = "elastic-internal-diagnostics"
 )
 
 var (
@@ -424,8 +426,9 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 
 		esSecretName, esSecretKey, err := determineESCredentialsSecret(k, ns, esName)
 		if err != nil {
-			// If no credentials secret was found this is a fatal error.
-			panic(fmt.Errorf("while determining Elasticsearch credentials secret: %w", err))
+			// If no credentials secret was found attempt to continue with the next resource
+			recordErr(fmt.Errorf("while determining Elasticsearch credentials secret: %w", err))
+			return nil
 		}
 
 		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, isTLS))
@@ -493,8 +496,8 @@ func determineESCredentialsSecret(k *Kubectl, ns, esName string) (secretName, se
 	diagnosticUserSecretName := fmt.Sprintf("%s-es-internal-users", esName)
 	secret, err := k.CoreV1().Secrets(ns).Get(context.Background(), diagnosticUserSecretName, metav1.GetOptions{})
 	if err == nil {
-		if _, ok := secret.Data["elastic-internal-diagnostics"]; ok {
-			return diagnosticUserSecretName, "elastic-internal-diagnostics", nil
+		if _, ok := secret.Data[diagnosticsUsername]; ok {
+			return diagnosticUserSecretName, diagnosticsUsername, nil
 		}
 	}
 
