@@ -48,6 +48,8 @@ const (
 	elasticsearchJob = "elasticsearch"
 	kibanaJob        = "kibana"
 	logstashJob      = "logstash"
+
+	diagnosticsUsername = "elastic-internal-diagnostics"
 )
 
 var (
@@ -145,7 +147,7 @@ func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, jobTimeo
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
-func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) error {
+func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName string, tls bool) error {
 	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
 	tpl, err := template.New("job").Parse(jobTemplate)
 	if err != nil {
@@ -155,17 +157,19 @@ func (ds *diagJobState) scheduleJob(typ, esName, resourceName string, tls bool) 
 	diagnosticType, svcSuffix := diagnosticTypeForApplication(typ)
 
 	buffer := new(bytes.Buffer)
-	err = tpl.Execute(buffer, map[string]interface{}{
+	data := map[string]interface{}{
 		"PodName":           podName,
 		"DiagnosticImage":   ds.diagnosticImage,
 		"Namespace":         ds.ns,
-		"ESName":            esName,
+		"ESSecretName":      esSecretName,
+		"ESSecretKey":       esSecretKey,
 		"SVCName":           fmt.Sprintf("%s-%s", resourceName, svcSuffix),
 		"Type":              diagnosticType,
 		"TLS":               tls,
 		"OutputDir":         podOutputDir,
 		"MainContainerName": podMainContainerName,
-	})
+	}
+	err = tpl.Execute(buffer, data)
 	if err != nil {
 		return err
 	}
@@ -261,7 +265,7 @@ func (ds *diagJobState) extractJobResults(file *archive.ZipFile) {
 				logger.Printf("Diagnostic pod %s/%s added\n", pod.Namespace, pod.Name)
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(_, newObj interface{}) {
 			pod, ok := newObj.(*corev1.Pod)
 			if !ok {
 				logger.Printf("Unexpected %v, expected type Pod\n", newObj)
@@ -420,7 +424,14 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			return nil
 		}
 
-		recordErr(state.scheduleJob(typ, esName, resourceName, isTLS))
+		esSecretName, esSecretKey, err := determineESCredentialsSecret(k, ns, esName)
+		if err != nil {
+			// If no credentials secret was found attempt to continue with the next resource
+			recordErr(fmt.Errorf("while determining Elasticsearch credentials secret: %w", err))
+			return nil
+		}
+
+		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, isTLS))
 		return nil
 	})
 }
@@ -475,4 +486,25 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info) (bool, st
 	}
 
 	return isTLS, esName, nil
+}
+
+// determineESCredentialsSecret returns the name of the secret containing the Elasticsearch credentials attempting
+// first to use the "elastic-internal-diagnostics" user secret, and then attempting to use the "elastic" user
+// and returning an error if either cannot be found, or the "elastic-internal-diagnostics" user does not have the
+// expected key.
+func determineESCredentialsSecret(k *Kubectl, ns, esName string) (secretName, secretKey string, err error) {
+	diagnosticUserSecretName := fmt.Sprintf("%s-es-internal-users", esName)
+	secret, err := k.CoreV1().Secrets(ns).Get(context.Background(), diagnosticUserSecretName, metav1.GetOptions{})
+	if err == nil {
+		if _, ok := secret.Data[diagnosticsUsername]; ok {
+			return diagnosticUserSecretName, diagnosticsUsername, nil
+		}
+	}
+
+	elasticSecretName := fmt.Sprintf("%s-es-elastic-user", esName)
+	if _, err := k.CoreV1().Secrets(ns).Get(context.Background(), elasticSecretName, metav1.GetOptions{}); err == nil {
+		return elasticSecretName, "elastic", nil
+	}
+
+	return "", "", fmt.Errorf("no credentials secret found for Elasticsearch %s", esName)
 }

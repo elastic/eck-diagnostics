@@ -33,7 +33,7 @@ func main() {
 		Long:    "Dump ECK and Kubernetes data for support and troubleshooting purposes.",
 		PreRunE: preRunOperations,
 		Version: internal.Version(),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return internal.Run(diagParams)
 		},
 	}
