@@ -28,7 +28,7 @@ RUN make build-binary generate-notice.txt
 #
 # package binaries in a lighter final image
 #
-FROM alpine:3.19
+FROM alpine:3.20
 
 ARG IMAGE_TAG
 ENV IMAGE_TAG=$IMAGE_TAG
