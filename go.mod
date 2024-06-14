@@ -7,7 +7,7 @@ toolchain go1.21.5
 require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/google/go-cmp v0.6.0
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	golang.org/x/text v0.14.0
 	k8s.io/api v0.29.4
 	k8s.io/apimachinery v0.29.4
