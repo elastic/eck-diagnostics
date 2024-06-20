@@ -153,8 +153,10 @@ func Run(params Params) error {
 		logsLabels = append(logsLabels, label.AsSelector().String())
 	}
 	// always collect operator information even in the presence of filters
-	namespaceFilters := params.Filters.WithSelectors(operatorSelectors)
-	logsFilters := filters.And(params.LogFilters.WithSelectors(operatorSelectors), namespaceFilters)
+	operatorFilters := filters.NewFromSelectors(operatorSelectors)
+	namespaceFilters := filters.Or(params.Filters, operatorFilters)
+	// for logs respect user defined log filters but add the operator filters here too so that the AND works out and we always have the operator logs
+	logsFilters := filters.And(filters.Or(params.LogFilters, operatorFilters), namespaceFilters)
 
 LOOP:
 	for ns := range allNamespaces {

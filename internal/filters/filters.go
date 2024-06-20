@@ -20,11 +20,51 @@ var (
 )
 
 type Filters interface {
-	WithSelectors(selectors []labels.Selector) Filters
 	Empty() bool
 	Matches(lbls map[string]string) bool
 	Contains(name, typ string) bool
 }
+
+func Or(fs ...Filters) Filters {
+	return &or{fs: fs}
+}
+
+type or struct {
+	fs []Filters
+}
+
+// Contains implements Filters.
+func (o *or) Contains(name string, typ string) bool {
+	for _, f := range o.fs {
+		if f.Contains(name, typ) {
+			return true
+		}
+	}
+	return false
+}
+
+// Empty implements Filters.
+func (o *or) Empty() bool {
+	for _, f := range o.fs {
+		// weirdly empty behaves like a logical AND here
+		if !f.Empty() {
+			return false
+		}
+	}
+	return true
+}
+
+// Matches implements Filters.
+func (o *or) Matches(lbls map[string]string) bool {
+	for _, f := range o.fs {
+		if f.Matches(lbls) {
+			return true
+		}
+	}
+	return false
+}
+
+var _ Filters = &or{}
 
 // And creates filters that are the logical AND of all passed filters in fs.
 func And(fs ...Filters) Filters {
@@ -65,25 +105,11 @@ func (a *and) Matches(lbls map[string]string) bool {
 	return true
 }
 
-// WithSelectors implements Filters.
-func (a *and) WithSelectors(selectors []labels.Selector) Filters {
-	for i, f := range a.fs {
-		a.fs[i] = f.WithSelectors(selectors)
-	}
-	return a
-}
-
 var _ Filters = &and{}
 
 // TypeFilters contains a Filter map for each Elastic type given in the filter "source".
 type TypeFilters struct {
-	byType    map[string][]Filter
-	selectors []labels.Selector
-}
-
-func (f TypeFilters) WithSelectors(selectors []labels.Selector) Filters {
-	f.selectors = append(f.selectors, selectors...)
-	return f
+	byType map[string][]Filter
 }
 
 // Empty returns if there are no defined filters.
@@ -105,17 +131,15 @@ func (f TypeFilters) Matches(lbls map[string]string) bool {
 			}
 		}
 	}
-	for _, selector := range f.selectors {
-		if selector.Matches(labels.Set(lbls)) {
-			return true
-		}
-	}
 	return false
 }
 
 // Contains will check if any of the filters of named type 'typ'
 // contain a filter for an object named 'name'.
 func (f TypeFilters) Contains(name, typ string) bool {
+	if f.Empty() {
+		return true // empty filter contains everything
+	}
 	var (
 		ok          bool
 		typeFilters []Filter
@@ -140,11 +164,11 @@ type Filter struct {
 	Selector labels.Selector
 }
 
-const wildcard = "*"
+const none = "_"
 
 var nothing = Filter{
-	Type:     wildcard,
-	Name:     wildcard,
+	Type:     none,
+	Name:     none,
 	Selector: labels.Nothing(),
 }
 
@@ -159,18 +183,28 @@ func New(filterSource []string) (Filters, error) {
 }
 
 func NewWithoutType(source []string) (Filters, error) {
-	filters := Empty
 	if len(source) == 0 {
-		return filters, nil
+		return Empty, nil
 	}
 	selectors, err := parseSelectors(source)
 	if err != nil {
-		return filters, err
+		return Empty, err
 	}
-	filters.byType = map[string][]Filter{
-		wildcard: {nothing},
+	return NewFromSelectors(selectors), nil
+}
+
+func NewFromSelectors(selectors []labels.Selector) Filters {
+	filters := Empty
+	if len(selectors) == 0 {
+		return filters
 	}
-	return filters.WithSelectors(selectors), nil
+	filters.byType = map[string][]Filter{}
+	for _, s := range selectors {
+		f := nothing
+		f.Selector = s
+		filters.byType[none] = append(filters.byType[none], f)
+	}
+	return filters
 }
 
 // parse will validate the given source filters, and for each
