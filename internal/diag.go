@@ -46,6 +46,7 @@ type Params struct {
 	Verbose                 bool
 	StackDiagnosticsTimeout time.Duration
 	Filters                 filters.Filters
+	LogFilters              filters.Filters
 }
 
 // AllNamespaces returns a slice containing all namespaces from which we want to extract diagnostic data.
@@ -146,12 +147,14 @@ func Run(params Params) error {
 		"common.k8s.elastic.co/type=logstash",          // 2.8.0
 	}
 
-	selectors := make([]labels.Selector, len(operatorLabels))
+	operatorSelectors := make([]labels.Selector, len(operatorLabels))
 	for i, label := range operatorLabels {
-		selectors[i] = label.AsSelector()
+		operatorSelectors[i] = label.AsSelector()
 		logsLabels = append(logsLabels, label.AsSelector().String())
 	}
-	namespaceFilters := params.Filters.WithSelectors(selectors)
+	// always collect operator information even in the presence of filters
+	namespaceFilters := params.Filters.WithSelectors(operatorSelectors)
+	logsFilters := filters.And(params.LogFilters.WithSelectors(operatorSelectors), namespaceFilters)
 
 LOOP:
 	for ns := range allNamespaces {
@@ -220,7 +223,7 @@ LOOP:
 			},
 		})
 
-		getLogs(kubectl, zipFile, ns, namespaceFilters, logsLabels...)
+		getLogs(kubectl, zipFile, ns, logsFilters, logsLabels...)
 
 		if params.RunStackDiagnostics {
 			runStackDiagnostics(

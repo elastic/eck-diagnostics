@@ -85,7 +85,7 @@ The ECK related custom resources are included in those namespaces as well:
 * Kibana
 
 ### Logs
-In the operator namespaces (`-o, --operator-namespaces`) all logs are collected, while in the workload resource namespaces only logs from Pods managed by ECK are collected.
+In the operator namespaces (`-o, --operator-namespaces`) the operator's logs are collected, while in the workload resource namespaces all logs from Pods managed by ECK are collected.
 
 ## Filtering collected resources
 

@@ -22,8 +22,9 @@ const (
 )
 
 var (
-	filters    []string
-	diagParams = internal.Params{}
+	filters         []string
+	rawLogSelectors []string
+	diagParams      = internal.Params{}
 )
 
 func main() {
@@ -43,6 +44,7 @@ func main() {
 	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, operatorNamespaces, "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
 	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, resourcesNamespaces, "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
 	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
+	cmd.Flags().StringSliceVarP(&rawLogSelectors, "log-selectors", "l", nil, "Comma-separated list of label selectors to restrict the logs selected.")
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
 	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostics-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
@@ -106,6 +108,11 @@ func parseFilters(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	diagParams.Filters = filters
+	logFilters, err := internal_filters.NewWithoutType(rawLogSelectors)
+	if err != nil {
+		return err
+	}
+	diagParams.LogFilters = logFilters
 	return nil
 }
 

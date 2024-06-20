@@ -9,34 +9,91 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/utils/strings/slices"
 )
 
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
 	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps", "logstash"}
-	Empty      = Filters{}
+	Empty      = TypeFilters{}
 )
 
-// Filters contains a Filter map for each Elastic type given in the filter "source".
-type Filters struct {
+type Filters interface {
+	WithSelectors(selectors []labels.Selector) Filters
+	Empty() bool
+	Matches(lbls map[string]string) bool
+	Contains(name, typ string) bool
+}
+
+// And creates filters that are the logical AND of all passed filters in fs.
+func And(fs ...Filters) Filters {
+	return &and{fs: fs}
+}
+
+type and struct {
+	fs []Filters
+}
+
+// Contains implements Filters.
+func (a *and) Contains(name string, typ string) bool {
+	for _, f := range a.fs {
+		if !f.Contains(name, typ) {
+			return false
+		}
+	}
+	return true
+}
+
+// Empty implements Filters.
+func (a *and) Empty() bool {
+	for _, f := range a.fs {
+		if !f.Empty() {
+			return false
+		}
+	}
+	return true
+}
+
+// Matches implements Filters.
+func (a *and) Matches(lbls map[string]string) bool {
+	for _, f := range a.fs {
+		if !f.Matches(lbls) {
+			return false
+		}
+	}
+	return true
+}
+
+// WithSelectors implements Filters.
+func (a *and) WithSelectors(selectors []labels.Selector) Filters {
+	for i, f := range a.fs {
+		a.fs[i] = f.WithSelectors(selectors)
+	}
+	return a
+}
+
+var _ Filters = &and{}
+
+// TypeFilters contains a Filter map for each Elastic type given in the filter "source".
+type TypeFilters struct {
 	byType    map[string][]Filter
 	selectors []labels.Selector
 }
 
-func (f Filters) WithSelectors(selectors []labels.Selector) Filters {
+func (f TypeFilters) WithSelectors(selectors []labels.Selector) Filters {
 	f.selectors = append(f.selectors, selectors...)
 	return f
 }
 
 // Empty returns if there are no defined filters.
-func (f Filters) Empty() bool {
+func (f TypeFilters) Empty() bool {
 	return len(f.byType) == 0
 }
 
 // Matches will determine if the given labels matches any of the
 // Filter's label selectors.
-func (f Filters) Matches(lbls map[string]string) bool {
+func (f TypeFilters) Matches(lbls map[string]string) bool {
 	// empty set of filters always matches.
 	if f.Empty() {
 		return true
@@ -58,7 +115,7 @@ func (f Filters) Matches(lbls map[string]string) bool {
 
 // Contains will check if any of the filters of named type 'typ'
 // contain a filter for an object named 'name'.
-func (f Filters) Contains(name, typ string) bool {
+func (f TypeFilters) Contains(name, typ string) bool {
 	var (
 		ok          bool
 		typeFilters []Filter
@@ -83,21 +140,44 @@ type Filter struct {
 	Selector labels.Selector
 }
 
+const wildcard = "*"
+
+var nothing = Filter{
+	Type:     wildcard,
+	Name:     wildcard,
+	Selector: labels.Nothing(),
+}
+
 // New returns a new set of filters, given a slice of key=value pairs,
 // parses and validates the given filters, and returns an error
 // if the given key=value pairs are invalid.
 //
-// source example:
+// filterSource example:
 // []string{"elasticsearch=my-cluster", "kibana=my-kb"}
-func New(source []string) (Filters, error) {
-	return parse(source)
+func New(filterSource []string) (Filters, error) {
+	return parse(filterSource)
+}
+
+func NewWithoutType(source []string) (Filters, error) {
+	filters := Empty
+	if len(source) == 0 {
+		return filters, nil
+	}
+	selectors, err := parseSelectors(source)
+	if err != nil {
+		return filters, err
+	}
+	filters.byType = map[string][]Filter{
+		wildcard: {nothing},
+	}
+	return filters.WithSelectors(selectors), nil
 }
 
 // parse will validate the given source filters, and for each
 // filter type, will create a Filter with a label selector,
 // returning the set of Filters, and any errors encountered.
 func parse(source []string) (Filters, error) {
-	filters := Filters{
+	filters := TypeFilters{
 		byType: map[string][]Filter{},
 	}
 	if len(source) == 0 {
@@ -116,7 +196,7 @@ func parse(source []string) (Filters, error) {
 		if _, ok := filters.byType[typ]; ok {
 			return filters, fmt.Errorf("invalid filter: %s: multiple filters for the same type (%s) are not supported", fltr, typ)
 		}
-		selector := processSelector(typ, name)
+		selector := buildSelectorForTypeFilter(typ, name)
 		filters.byType[typ] = append(filters.byType[typ], Filter{
 			Name:     name,
 			Type:     typ,
@@ -126,6 +206,24 @@ func parse(source []string) (Filters, error) {
 	return filters, nil
 }
 
+func parseSelectors(selectorSource []string) ([]labels.Selector, error) {
+	var selectors []labels.Selector
+	var errs []error
+	for _, s := range selectorSource {
+		parsed, err := labels.Parse(s)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		selectors = append(selectors, parsed)
+
+	}
+	if len(errs) > 0 {
+		return nil, errors.NewAggregate(errs)
+	}
+	return selectors, nil
+}
+
 func validateType(typ string) error {
 	if !slices.Contains(ValidTypes, typ) {
 		return fmt.Errorf("invalid filter type: %s, supported types: %v", typ, ValidTypes)
@@ -133,7 +231,7 @@ func validateType(typ string) error {
 	return nil
 }
 
-// processSelector will create a label set for a given type+name pair,
+// buildSelectorForTypeFilter will create a label set for a given type+name pair,
 // create a selector from that label set, and add label requirements
 // to the selector for each key/value in the label set, returning the selector
 // and any errors in processing.
@@ -143,7 +241,7 @@ func validateType(typ string) error {
 //	Selector.Match(LabelSet)
 //
 // against any runtime object's labels.
-func processSelector(typ, name string) labels.Selector {
+func buildSelectorForTypeFilter(typ, name string) labels.Selector {
 	nameAttr := "name"
 	if typ == "elasticsearch" {
 		nameAttr = "cluster-name"
