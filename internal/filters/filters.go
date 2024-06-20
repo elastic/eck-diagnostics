@@ -16,7 +16,7 @@ import (
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
 	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps", "logstash"}
-	Empty      = TypeFilters{}
+	Empty      = make(TypeFilters)
 )
 
 type Filters interface {
@@ -108,13 +108,11 @@ func (a *and) Matches(lbls map[string]string) bool {
 var _ Filters = &and{}
 
 // TypeFilters contains a Filter map for each Elastic type given in the filter "source".
-type TypeFilters struct {
-	byType map[string][]Filter
-}
+type TypeFilters map[string][]Filter
 
 // Empty returns if there are no defined filters.
 func (f TypeFilters) Empty() bool {
-	return len(f.byType) == 0
+	return len(f) == 0
 }
 
 // Matches will determine if the given labels matches any of the
@@ -124,7 +122,7 @@ func (f TypeFilters) Matches(lbls map[string]string) bool {
 	if f.Empty() {
 		return true
 	}
-	for _, fs := range f.byType {
+	for _, fs := range f {
 		for _, filter := range fs {
 			if filter.Selector.Matches(labels.Set(lbls)) {
 				return true
@@ -144,7 +142,7 @@ func (f TypeFilters) Contains(name, typ string) bool {
 		ok          bool
 		typeFilters []Filter
 	)
-	if typeFilters, ok = f.byType[typ]; !ok {
+	if typeFilters, ok = f[typ]; !ok {
 		return false
 	}
 	for _, filter := range typeFilters {
@@ -198,11 +196,11 @@ func NewFromSelectors(selectors []labels.Selector) Filters {
 	if len(selectors) == 0 {
 		return filters
 	}
-	filters.byType = map[string][]Filter{}
+	filters = map[string][]Filter{}
 	for _, s := range selectors {
 		f := nothing
 		f.Selector = s
-		filters.byType[none] = append(filters.byType[none], f)
+		filters[none] = append(filters[none], f)
 	}
 	return filters
 }
@@ -211,12 +209,10 @@ func NewFromSelectors(selectors []labels.Selector) Filters {
 // filter type, will create a Filter with a label selector,
 // returning the set of Filters, and any errors encountered.
 func parse(source []string) (Filters, error) {
-	filters := TypeFilters{
-		byType: map[string][]Filter{},
-	}
 	if len(source) == 0 {
-		return filters, nil
+		return Empty, nil
 	}
+	filters := make(TypeFilters)
 	var typ, name string
 	for _, fltr := range source {
 		filterSlice := strings.Split(fltr, "=")
@@ -227,11 +223,11 @@ func parse(source []string) (Filters, error) {
 		if err := validateType(typ); err != nil {
 			return filters, err
 		}
-		if _, ok := filters.byType[typ]; ok {
+		if _, ok := filters[typ]; ok {
 			return filters, fmt.Errorf("invalid filter: %s: multiple filters for the same type (%s) are not supported", fltr, typ)
 		}
 		selector := buildSelectorForTypeFilter(typ, name)
-		filters.byType[typ] = append(filters.byType[typ], Filter{
+		filters[typ] = append(filters[typ], Filter{
 			Name:     name,
 			Type:     typ,
 			Selector: selector,

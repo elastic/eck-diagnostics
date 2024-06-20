@@ -25,13 +25,13 @@ func TestNew(t *testing.T) {
 		{
 			name:    "empty/no filter is valid",
 			filters: []string{},
-			want:    TypeFilters{byType: map[string][]Filter{}},
+			want:    make(TypeFilters),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and agent type is valid",
 			filters: []string{"agent=myagent"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"agent": {{
 					Type: "agent",
 					Name: "myagent",
@@ -39,13 +39,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "agent")).
 						Add(mustParseRequirement("agent.k8s.elastic.co/name", "myagent")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and apm type is valid",
 			filters: []string{"apm=myapm"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"apm": {{
 					Type: "apm",
 					Name: "myapm",
@@ -53,13 +53,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "apm")).
 						Add(mustParseRequirement("apm.k8s.elastic.co/name", "myapm")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and beat type is valid",
 			filters: []string{"beat=mybeat"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"beat": {{
 					Type: "beat",
 					Name: "mybeat",
@@ -67,13 +67,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "beat")).
 						Add(mustParseRequirement("beat.k8s.elastic.co/name", "mybeat")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and elasticsearch type is valid",
 			filters: []string{"elasticsearch=mycluster"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"elasticsearch": {{
 					Type: "elasticsearch",
 					Name: "mycluster",
@@ -81,13 +81,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "elasticsearch")).
 						Add(mustParseRequirement("elasticsearch.k8s.elastic.co/cluster-name", "mycluster")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and enterprisesearch type is valid",
 			filters: []string{"enterprisesearch=mycluster"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"enterprisesearch": {{
 					Type: "enterprisesearch",
 					Name: "mycluster",
@@ -95,13 +95,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "enterprisesearch")).
 						Add(mustParseRequirement("enterprisesearch.k8s.elastic.co/name", "mycluster")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and kibana type is valid",
 			filters: []string{"kibana=mykb"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"kibana": {{
 					Type: "kibana",
 					Name: "mykb",
@@ -109,13 +109,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "kibana")).
 						Add(mustParseRequirement("kibana.k8s.elastic.co/name", "mykb")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "valid name and maps type is valid",
 			filters: []string{"maps=mymaps"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"maps": {{
 					Type: "maps",
 					Name: "mymaps",
@@ -123,13 +123,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "maps")).
 						Add(mustParseRequirement("maps.k8s.elastic.co/name", "mymaps")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "multiple valid filters return correctly",
 			filters: []string{"elasticsearch=mycluster", "kibana=my-kb", "agent=my-agent"},
-			want: TypeFilters{byType: map[string][]Filter{
+			want: TypeFilters(map[string][]Filter{
 				"agent": {{
 					Type: "agent",
 					Name: "my-agent",
@@ -151,13 +151,13 @@ func TestNew(t *testing.T) {
 						Add(mustParseRequirement("common.k8s.elastic.co/type", "kibana")).
 						Add(mustParseRequirement("kibana.k8s.elastic.co/name", "my-kb")),
 				}},
-			}},
+			}),
 			wantErr: false,
 		},
 		{
 			name:    "invalid type is invalid",
 			filters: []string{"type=invalid"},
-			want:    TypeFilters{byType: map[string][]Filter{}},
+			want:    Empty,
 			wantErr: true,
 		},
 	}
@@ -193,19 +193,19 @@ func TestTypeFilters_Matches(t *testing.T) {
 		req, _ := labels.NewRequirement(k, selection.Equals, []string{v})
 		selector.Add(*req)
 	}
-	defaultTypeFilters := TypeFilters{
-		byType: map[string][]Filter{
+	defaultTypeFilters := TypeFilters(
+		map[string][]Filter{
 			"elasticsearch": {{
 				Type:     "elasticsearch",
 				Name:     "my-cluster",
 				Selector: selector,
 			}},
 		},
-	}
+	)
 	tests := []struct {
 		name      string
 		labels    map[string]string
-		filterMap map[string][]Filter
+		filterMap Filters
 		selectors []labels.Selector
 		want      bool
 	}{
@@ -232,7 +232,7 @@ func TestTypeFilters_Matches(t *testing.T) {
 				"elasticsearch.k8s.elastic.co/version":                    "8.2.3",
 				"statefulset.kubernetes.io/pod-name":                      "my-cluster-es-default-0",
 			},
-			filterMap: defaultTypeFilters.byType,
+			filterMap: defaultTypeFilters,
 			want:      true,
 		},
 		{
@@ -243,7 +243,7 @@ func TestTypeFilters_Matches(t *testing.T) {
 				"common.k8s.elastic.co/type":   "agent",
 				"pod-template-hash":            "7cbfdc4d78",
 			},
-			filterMap: defaultTypeFilters.byType,
+			filterMap: defaultTypeFilters,
 			want:      false,
 		},
 		{
@@ -254,23 +254,21 @@ func TestTypeFilters_Matches(t *testing.T) {
 				"common.k8s.elastic.co/type":   "agent",
 				"pod-template-hash":            "7cbfdc4d78",
 			},
-			filterMap: nil,
+			filterMap: Empty,
 			want:      true,
 		},
-		/*{
-			name: "with selector matches",
+		{
+			name: "from selector matches",
 			labels: map[string]string{
 				"control-plane": "elastic-operator",
 			},
-			filterMap: NewFromSelectors( []labels.Selector{labels.Set{ "control-plane": "elastic-operator" }.AsSelector() }),
-			want: true,
-		},*/
+			filterMap: NewFromSelectors([]labels.Selector{labels.Set{"control-plane": "elastic-operator"}.AsSelector()}),
+			want:      true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := TypeFilters{
-				byType: tt.filterMap,
-			}
+			f := tt.filterMap
 			if got := f.Matches(tt.labels); got != tt.want {
 				t.Errorf("TypeFilters.Matches() = %v, want %v", got, tt.want)
 			}
@@ -281,11 +279,11 @@ func TestTypeFilters_Matches(t *testing.T) {
 func TestAnd(t *testing.T) {
 	typeFixture := "elasticsearch"
 	nameFixture := "es"
-	esFilterFixture := TypeFilters{byType: map[string][]Filter{"elasticsearch": {Filter{
+	esFilterFixture := TypeFilters(map[string][]Filter{"elasticsearch": {Filter{
 		Type:     typeFixture,
 		Name:     nameFixture,
 		Selector: labels.NewSelector().Add(mustParseRequirement("common.k8s.elastic.co/type", "elasticsearch")),
-	}}}}
+	}}})
 	type args struct {
 		fs []Filters
 	}
@@ -307,9 +305,9 @@ func TestAnd(t *testing.T) {
 		{
 			name: "nothing",
 			args: args{
-				fs: []Filters{TypeFilters{byType: map[string][]Filter{
+				fs: []Filters{TypeFilters(map[string][]Filter{
 					none: {nothing},
-				}}},
+				})},
 			},
 			wantMatches:  false,
 			wantContains: false,
@@ -318,7 +316,7 @@ func TestAnd(t *testing.T) {
 		{
 			name: "nothing and something is still nothing",
 			args: args{fs: []Filters{
-				TypeFilters{byType: map[string][]Filter{"*": {nothing}}},
+				TypeFilters(map[string][]Filter{none: {nothing}}),
 				esFilterFixture,
 			},
 			},
@@ -360,11 +358,11 @@ func TestAnd(t *testing.T) {
 		{
 			name: "contains is also and'ed ",
 			args: args{fs: []Filters{
-				TypeFilters{byType: map[string][]Filter{typeFixture: {{
+				TypeFilters(map[string][]Filter{typeFixture: {{
 					Name:     nameFixture,
 					Type:     typeFixture,
 					Selector: labels.Nothing(),
-				}}}},
+				}}}),
 				esFilterFixture,
 			}},
 			labels:       map[string]string{"common.k8s.elastic.co/type": "elasticsearch"},
