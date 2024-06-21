@@ -13,9 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/util/errors"
 )
 
-func TestNew(t *testing.T) {
+func TestNewTypeFilter(t *testing.T) {
 	tests := []struct {
 		name    string
 		filters []string
@@ -31,7 +32,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and agent type is valid",
 			filters: []string{"agent=myagent"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"agent": {{
 					Type: "agent",
 					Name: "myagent",
@@ -45,7 +46,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and apm type is valid",
 			filters: []string{"apm=myapm"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"apm": {{
 					Type: "apm",
 					Name: "myapm",
@@ -59,7 +60,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and beat type is valid",
 			filters: []string{"beat=mybeat"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"beat": {{
 					Type: "beat",
 					Name: "mybeat",
@@ -73,7 +74,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and elasticsearch type is valid",
 			filters: []string{"elasticsearch=mycluster"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"elasticsearch": {{
 					Type: "elasticsearch",
 					Name: "mycluster",
@@ -87,7 +88,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and enterprisesearch type is valid",
 			filters: []string{"enterprisesearch=mycluster"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"enterprisesearch": {{
 					Type: "enterprisesearch",
 					Name: "mycluster",
@@ -101,7 +102,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and kibana type is valid",
 			filters: []string{"kibana=mykb"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"kibana": {{
 					Type: "kibana",
 					Name: "mykb",
@@ -115,7 +116,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "valid name and maps type is valid",
 			filters: []string{"maps=mymaps"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"maps": {{
 					Type: "maps",
 					Name: "mymaps",
@@ -129,7 +130,7 @@ func TestNew(t *testing.T) {
 		{
 			name:    "multiple valid filters return correctly",
 			filters: []string{"elasticsearch=mycluster", "kibana=my-kb", "agent=my-agent"},
-			want: TypeFilters(map[string][]Filter{
+			want: TypeFilters(map[string][]TypeFilter{
 				"agent": {{
 					Type: "agent",
 					Name: "my-agent",
@@ -163,7 +164,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := New(tt.filters)
+			got, err := NewTypeFilter(tt.filters)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -194,7 +195,7 @@ func TestTypeFilters_Matches(t *testing.T) {
 		selector.Add(*req)
 	}
 	defaultTypeFilters := TypeFilters(
-		map[string][]Filter{
+		map[string][]TypeFilter{
 			"elasticsearch": {{
 				Type:     "elasticsearch",
 				Name:     "my-cluster",
@@ -262,7 +263,7 @@ func TestTypeFilters_Matches(t *testing.T) {
 			labels: map[string]string{
 				"control-plane": "elastic-operator",
 			},
-			filterMap: NewFromSelectors([]labels.Selector{labels.Set{"control-plane": "elastic-operator"}.AsSelector()}),
+			filterMap: LabelFilter([]labels.Selector{labels.Set{"control-plane": "elastic-operator"}.AsSelector()}),
 			want:      true,
 		},
 	}
@@ -276,14 +277,25 @@ func TestTypeFilters_Matches(t *testing.T) {
 	}
 }
 
-func TestAnd(t *testing.T) {
-	typeFixture := "elasticsearch"
-	nameFixture := "es"
-	esFilterFixture := TypeFilters(map[string][]Filter{"elasticsearch": {Filter{
+const none = "_"
+
+var (
+	nothing = TypeFilter{
+		Type:     none,
+		Name:     none,
+		Selector: labels.Nothing(),
+	}
+	typeFixture          = "elasticsearch"
+	nameFixture          = "es"
+	nothingFilterFixture = TypeFilters(map[string][]TypeFilter{none: {nothing}})
+	esFilterFixture      = TypeFilters(map[string][]TypeFilter{"elasticsearch": {TypeFilter{
 		Type:     typeFixture,
 		Name:     nameFixture,
 		Selector: labels.NewSelector().Add(mustParseRequirement("common.k8s.elastic.co/type", "elasticsearch")),
 	}}})
+)
+
+func TestAnd(t *testing.T) {
 	type args struct {
 		fs []Filters
 	}
@@ -305,9 +317,7 @@ func TestAnd(t *testing.T) {
 		{
 			name: "nothing",
 			args: args{
-				fs: []Filters{TypeFilters(map[string][]Filter{
-					none: {nothing},
-				})},
+				fs: []Filters{nothingFilterFixture},
 			},
 			wantMatches:  false,
 			wantContains: false,
@@ -316,10 +326,9 @@ func TestAnd(t *testing.T) {
 		{
 			name: "nothing and something is still nothing",
 			args: args{fs: []Filters{
-				TypeFilters(map[string][]Filter{none: {nothing}}),
+				nothingFilterFixture,
 				esFilterFixture,
-			},
-			},
+			}},
 			labels: map[string]string{
 				"common.k8s.elastic.co/type": "elasticsearch",
 			},
@@ -330,7 +339,7 @@ func TestAnd(t *testing.T) {
 		{
 			name: "refine filters by and'ing: match case",
 			args: args{fs: []Filters{
-				NewFromSelectors([]labels.Selector{labels.NewSelector().Add(mustParseRequirement("my-label", "value"))}),
+				LabelFilter([]labels.Selector{labels.NewSelector().Add(mustParseRequirement("my-label", "value"))}),
 				esFilterFixture,
 			}},
 			labels: map[string]string{
@@ -344,7 +353,7 @@ func TestAnd(t *testing.T) {
 		{
 			name: "refine filters by and'ing: reject case",
 			args: args{fs: []Filters{
-				NewFromSelectors([]labels.Selector{labels.NewSelector().Add(mustParseRequirement("my-label", "value"))}),
+				LabelFilter([]labels.Selector{labels.NewSelector().Add(mustParseRequirement("my-label", "value"))}),
 				esFilterFixture,
 			}},
 			labels: map[string]string{
@@ -358,7 +367,7 @@ func TestAnd(t *testing.T) {
 		{
 			name: "contains is also and'ed ",
 			args: args{fs: []Filters{
-				TypeFilters(map[string][]Filter{typeFixture: {{
+				TypeFilters(map[string][]TypeFilter{typeFixture: {{
 					Name:     nameFixture,
 					Type:     typeFixture,
 					Selector: labels.Nothing(),
@@ -374,6 +383,171 @@ func TestAnd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := And(tt.args.fs...)
+			require.Equal(t, tt.wantContains, f.Contains(nameFixture, typeFixture), "contains")
+			require.Equal(t, tt.wantMatches, f.Matches(tt.labels), "matches")
+			require.Equal(t, tt.wantEmpty, f.Empty(), "empty")
+		})
+	}
+}
+
+func TestNewLabelFilter(t *testing.T) {
+	type args struct {
+		source []string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    Filters
+		wantErr int
+	}{
+		{
+			name:    "empty",
+			args:    args{},
+			want:    Empty,
+			wantErr: 0,
+		},
+		{
+			name: "Single selector OK",
+			args: args{
+				source: []string{"label=value-a"},
+			},
+			want:    LabelFilter{labels.Set{"label": "value-a"}.AsSelector()},
+			wantErr: 0,
+		},
+		{
+			name: "Multiple selectors: OK ",
+			args: args{
+				source: []string{"label=value-a", "label=value-b"},
+			},
+			want: LabelFilter{
+				labels.Set{"label": "value-a"}.AsSelector(),
+				labels.Set{"label": "value-b"}.AsSelector(),
+			},
+			wantErr: 0,
+		},
+		{
+			name: "Multiple selectors: one error",
+			args: args{
+				source: []string{"valid=selector", "invalid("},
+			},
+			want:    Empty,
+			wantErr: 1,
+		},
+		{
+			name: "Multiple selectors: multiple errors",
+			args: args{
+				source: []string{"invalid=(selector", "invalid("},
+			},
+			want:    Empty,
+			wantErr: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewLabelFilter(tt.args.source)
+			if (err != nil) != (tt.wantErr > 0) {
+				t.Errorf("NewLabelFilter() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil {
+				if agg, ok := err.(errors.Aggregate); ok {
+					require.Equal(t, tt.wantErr, len(agg.Errors()), "number of expected errors")
+				}
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewLabelFilter() = diff: %s", cmp.Diff(got, tt.want))
+			}
+		})
+	}
+}
+
+func TestOr(t *testing.T) {
+	type args struct {
+		fs []Filters
+	}
+	tests := []struct {
+		name         string
+		args         args
+		labels       map[string]string
+		wantMatches  bool
+		wantContains bool
+		wantEmpty    bool
+	}{
+		{
+			name:         "empty",
+			args:         args{},
+			wantMatches:  false,
+			wantContains: false,
+			wantEmpty:    true,
+		},
+		{
+			name: "nothing",
+			args: args{
+				fs: []Filters{nothingFilterFixture},
+			},
+			labels:       map[string]string{},
+			wantMatches:  false,
+			wantContains: false,
+			wantEmpty:    false,
+		},
+		{
+			name: "nothing and empty",
+			args: args{
+				fs: []Filters{nothingFilterFixture, Empty},
+			},
+			wantMatches:  true, // empty matches everything
+			wantContains: true, // empty contains everything
+			wantEmpty:    true,
+		},
+		{
+			name: "match something rhs",
+			args: args{
+				fs: []Filters{
+					nothingFilterFixture,
+					esFilterFixture,
+				},
+			},
+			labels: map[string]string{
+				"common.k8s.elastic.co/type": "elasticsearch",
+			},
+			wantMatches:  true,
+			wantContains: true,
+			wantEmpty:    false,
+		},
+		{
+			name: "match something lhs",
+			args: args{
+				fs: []Filters{
+					esFilterFixture,
+					nothingFilterFixture,
+				},
+			},
+			labels: map[string]string{
+				"common.k8s.elastic.co/type": "elasticsearch",
+			},
+			wantMatches:  true,
+			wantContains: true,
+			wantEmpty:    false,
+		},
+		{
+			name: "match something both sides",
+			args: args{
+				fs: []Filters{
+					esFilterFixture,
+					LabelFilter{labels.Set{"key": "value"}.AsSelector()},
+				},
+			},
+			labels: map[string]string{
+				"key": "value",
+			},
+			wantMatches:  true,
+			wantContains: true,
+			wantEmpty:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := Or(tt.args.fs...)
 			require.Equal(t, tt.wantContains, f.Contains(nameFixture, typeFixture), "contains")
 			require.Equal(t, tt.wantMatches, f.Matches(tt.labels), "matches")
 			require.Equal(t, tt.wantEmpty, f.Empty(), "empty")

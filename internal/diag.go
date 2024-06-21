@@ -153,7 +153,8 @@ func Run(params Params) error {
 		logsLabels = append(logsLabels, label.AsSelector().String())
 	}
 	// always collect operator information even in the presence of filters
-	operatorFilters := filters.NewFromSelectors(operatorSelectors)
+	operatorFilters := filters.LabelFilter(operatorSelectors)
+	// user defined type filters or any resource related to the operator
 	namespaceFilters := filters.Or(params.Filters, operatorFilters)
 	// for logs respect user defined log filters but add the operator filters here too so that the AND works out and we always have the operator logs
 	logsFilters := filters.And(filters.Or(params.LogFilters, operatorFilters), namespaceFilters)

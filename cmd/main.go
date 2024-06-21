@@ -103,12 +103,12 @@ func validation(_ *cobra.Command, _ []string) error {
 }
 
 func parseFilters(_ *cobra.Command, _ []string) error {
-	filters, err := internal_filters.New(filters)
+	filters, err := internal_filters.NewTypeFilter(filters)
 	if err != nil {
 		return err
 	}
 	diagParams.Filters = filters
-	logFilters, err := internal_filters.NewWithoutType(rawLogSelectors)
+	logFilters, err := internal_filters.NewLabelFilter(rawLogSelectors)
 	if err != nil {
 		return err
 	}
