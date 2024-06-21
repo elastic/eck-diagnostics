@@ -5,7 +5,7 @@
 #
 # build go binaries
 #
-FROM golang:1.22.2 as builder
+FROM golang:1.22.4 as builder
 
 ARG VERSION
 ARG SHA1
@@ -28,7 +28,7 @@ RUN make build-binary generate-notice.txt
 #
 # package binaries in a lighter final image
 #
-FROM alpine:3.19
+FROM alpine:3.20
 
 ARG IMAGE_TAG
 ENV IMAGE_TAG=$IMAGE_TAG
