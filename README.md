@@ -31,6 +31,7 @@ Flags:
   -f, --filters strings                      Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps])
   -h, --help                                 help for eck-diagnostics
       --kubeconfig string                    optional path to kube config, defaults to $HOME/.kube/config
+  -l, --log-selectors stringArray            Label selectors to restrict the logs to be collected. Can be specified more than once.
   -o, --operator-namespaces strings          Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
       --output-directory string              Path where to output diagnostic results
   -n, --output-name string                   Name of the output diagnostics file (default "eck-diagnostic-2023-02-21T09-16-17.zip")
@@ -89,15 +90,28 @@ In the operator namespaces (`-o, --operator-namespaces`) the operator's logs are
 
 ## Filtering collected resources
 
-The resources in the specified namespaces that are collected by eck-diagnostics can be filtered with the `-f, --filters` flag.
+The resources in the specified namespaces that are collected by eck-diagnostics can be filtered with the `-f, --filters` and `-l, --log-selectors` flags.
 
-### Usage Example
+### Usage Examples
 
 The following example will run the diagnostics for Elastic resources in namespace `a`, and will only return resources associated with either an Elasticsearch cluster named `mycluster` or a Kibana instance named `my-kb`.
 
 ```shell
 eck-diagnostics -r a -f "elasticsearch=mycluster" -f "kibana=my-kb"
 ```
+
+To restrict the amount of logs collected by eck-diagnostics use the `-l, --log-selectors` flag (repeatedly). For example to only collect the logs for Kibana and the Elasticsearch master nodes that are not data nodes: 
+
+
+```shell
+eck-diagnostics -r a -f "elasticsearch=mycluster" -f "kibana=my-kb" -l 'elasticsearch.k8s.elastic.co/node-master=true,elasticsearch.k8s.elastic.co/node-data!=true' -l common.k8s.elastic.co/type=kibana
+```
+
+The log selector flags `-l` can also be used without the filter flags `-f` and [set-based Kubernetes requirement syntax](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#set-based-requirement) is also supported:
+```shell
+eck-diagnostics -r a  -l 'apps.kubernetes.io/pod-index notin(0,1)'
+```
+
 
 ### Filtered resources
 
