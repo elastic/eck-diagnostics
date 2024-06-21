@@ -35,6 +35,9 @@ type or struct {
 
 // Contains implements Filters.
 func (o *or) Contains(name string, typ string) bool {
+	if o.Empty() {
+		return true
+	}
 	for _, f := range o.fs {
 		if f.Contains(name, typ) {
 			return true
@@ -58,6 +61,9 @@ func (o *or) Empty() bool {
 
 // Matches implements Filters.
 func (o *or) Matches(lbls map[string]string) bool {
+	if o.Empty() {
+		return true
+	}
 	for _, f := range o.fs {
 		if f.Matches(lbls) {
 			return true

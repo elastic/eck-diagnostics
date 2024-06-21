@@ -478,8 +478,8 @@ func TestOr(t *testing.T) {
 		{
 			name:         "empty",
 			args:         args{},
-			wantMatches:  false,
-			wantContains: false,
+			wantMatches:  true,
+			wantContains: true,
 			wantEmpty:    true,
 		},
 		{
