@@ -167,7 +167,7 @@ type TypeFilter struct {
 type LabelFilter []labels.Selector
 
 // Contains implements Filters.
-func (s LabelFilter) Contains(name string, typ string) bool {
+func (s LabelFilter) Contains(_, _ string) bool {
 	return false
 }
 
@@ -244,7 +244,7 @@ func parse(source []string) (Filters, error) {
 }
 
 func parseSelectors(selectorSource []string) ([]labels.Selector, error) {
-	var selectors []labels.Selector
+	selectors := make([]labels.Selector, 0, len(selectorSource))
 	var errs []error
 	for _, s := range selectorSource {
 		parsed, err := labels.Parse(s)
@@ -253,7 +253,6 @@ func parseSelectors(selectorSource []string) ([]labels.Selector, error) {
 			continue
 		}
 		selectors = append(selectors, parsed)
-
 	}
 	if len(errs) > 0 {
 		return nil, errors.NewAggregate(errs)

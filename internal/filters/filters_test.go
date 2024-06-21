@@ -5,6 +5,7 @@
 package filters
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -13,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/apimachinery/pkg/util/errors"
+	utilerrs "k8s.io/apimachinery/pkg/util/errors"
 )
 
 func TestNewTypeFilter(t *testing.T) {
@@ -450,7 +451,8 @@ func TestNewLabelFilter(t *testing.T) {
 				return
 			}
 			if err != nil {
-				if agg, ok := err.(errors.Aggregate); ok {
+				var agg utilerrs.Aggregate
+				if errors.As(err, &agg) {
 					require.Equal(t, tt.wantErr, len(agg.Errors()), "number of expected errors")
 				}
 			}
