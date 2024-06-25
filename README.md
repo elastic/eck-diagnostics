@@ -28,18 +28,19 @@ Usage:
 Flags:
       --diagnostic-image string              Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:8.5.0")
       --eck-version string                   ECK version in use, will try to autodetect if not specified
-  -f, --filters strings                      Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps])
+  -f, --filters strings                      Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps logstash])
   -h, --help                                 help for eck-diagnostics
       --kubeconfig string                    optional path to kube config, defaults to $HOME/.kube/config
-  -l, --log-selectors stringArray            Label selectors to restrict the logs to be collected. Can be specified more than once.
+  -l, --log-selectors stringArray            Label selectors to restrict the logs to be collected. Can be specified more than once. Example: -l 'elasticsearch.k8s.elastic.co/node-master=true,elasticsearch.k8s.elastic.co/node-data!=true' -l common.k8s.elastic.co/type=kibana.
   -o, --operator-namespaces strings          Comma-separated list of namespace(s) in which operator(s) are running (default [elastic-system])
       --output-directory string              Path where to output diagnostic results
-  -n, --output-name string                   Name of the output diagnostics file (default "eck-diagnostic-2023-02-21T09-16-17.zip")
+  -n, --output-name string                   Name of the output diagnostics file (default "eck-diagnostics-2024-06-25T09-28-37.zip")
   -r, --resources-namespaces strings         Comma-separated list of namespace(s) in which resources are managed
       --run-agent-diagnostics                Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
       --run-stack-diagnostics                Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
       --stack-diagnostics-timeout duration   Maximum time to wait for Elaticsearch and Kibana diagnostics to complete (default 5m0s)
       --verbose                              Verbose mode
+  -v, --version                              version for eck-diagnostics
 ```
 
 ## Information collected by eck-diagnostics
