@@ -22,8 +22,9 @@ const (
 )
 
 var (
-	filters    []string
-	diagParams = internal.Params{}
+	filters         []string
+	rawLogSelectors []string
+	diagParams      = internal.Params{}
 )
 
 func main() {
@@ -42,7 +43,8 @@ func main() {
 	cmd.Flags().BoolVar(&diagParams.RunAgentDiagnostics, "run-agent-diagnostics", false, "Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive")
 	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, operatorNamespaces, "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
 	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, resourcesNamespaces, "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
-	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". ex: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
+	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
+	cmd.Flags().StringArrayVarP(&rawLogSelectors, "log-selectors", "l", nil, "Label selectors to restrict the logs to be collected. Can be specified more than once. Example: -l 'elasticsearch.k8s.elastic.co/node-master=true,elasticsearch.k8s.elastic.co/node-data!=true' -l common.k8s.elastic.co/type=kibana")
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
 	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostics-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
@@ -101,11 +103,16 @@ func validation(_ *cobra.Command, _ []string) error {
 }
 
 func parseFilters(_ *cobra.Command, _ []string) error {
-	filters, err := internal_filters.New(filters)
+	filters, err := internal_filters.NewTypeFilter(filters)
 	if err != nil {
 		return err
 	}
 	diagParams.Filters = filters
+	logFilters, err := internal_filters.NewLabelFilter(rawLogSelectors)
+	if err != nil {
+		return err
+	}
+	diagParams.LogFilters = logFilters
 	return nil
 }
 
