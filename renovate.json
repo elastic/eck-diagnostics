@@ -1,10 +1,10 @@
 {
   "extends": [
-    "config:base"
+    "config:recommended"
   ],
   "packageRules": [
     {
-      "packageNames": [
+      "matchPackageNames": [
         "k8s.io/api",
         "k8s.io/apimachinery",
         "k8s.io/cli-runtime",
