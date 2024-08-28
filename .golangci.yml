@@ -22,7 +22,6 @@ linters:
     - cyclop
     - depguard
     - dupl
-    - exhaustivestruct
     - forbidigo
     - funlen
     - gci
@@ -32,14 +31,11 @@ linters:
     - gocyclo
     - godot
     - godox
-    - goerr113
+    - err113
     - gofmt
     - gofumpt
-    - golint
     - gomnd
     - gomodguard
-    - interfacer
-    - maligned
     - nlreturn
     - paralleltest
     - rowserrcheck
@@ -52,13 +48,12 @@ linters:
   enable:
     - asciicheck
     - bodyclose
-    - deadcode
     - dogsled
     - durationcheck
     - errcheck
     - errorlint
     - exhaustive
-    - exportloopref
+    - copyloopvar
     - forcetypeassert
     - gocritic
     - goheader
@@ -80,14 +75,12 @@ linters:
     - predeclared
     - revive
     - staticcheck
-    - structcheck
     - thelper
     - tparallel
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - wastedassign
     - whitespace
 

@@ -129,7 +129,7 @@ func Run(params Params) error {
 		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
 	}
 
-	maxOperatorVersion := max(operatorVersions)
+	maxOperatorVersion := maxVersion(operatorVersions)
 	logVersion(maxOperatorVersion)
 
 	allNamespaces := sets.New(params.ResourcesNamespaces...)

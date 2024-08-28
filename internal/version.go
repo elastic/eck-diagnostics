@@ -99,7 +99,7 @@ func extractVersionFromContainers(containers []corev1.Container) *version.Versio
 		if strings.Contains(container.Image, "eck-operator") {
 			parsed, err := extractVersionFromDockerImage(container.Image)
 			if err != nil {
-				logger.Printf(err.Error())
+				logger.Print(err.Error())
 				return fallbackMaxVersion
 			}
 			return parsed
@@ -142,8 +142,8 @@ func extractVersionFromDockerImage(image string) (*version.Version, error) {
 	return fallbackMaxVersion, nil
 }
 
-// max returns the maximum of the given versions.
-func max(versions []*version.Version) *version.Version {
+// maxVersion returns the maximum of the given versions.
+func maxVersion(versions []*version.Version) *version.Version {
 	if len(versions) == 0 {
 		return fallbackMaxVersion
 	}
