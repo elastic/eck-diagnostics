@@ -25,7 +25,7 @@ steps:
       - .buildkite/registry-login.sh
       - drivah build --push .
     agents:
-      image: "docker.elastic.co/ci-agent-images/drivah:0.25.3"
+      image: "docker.elastic.co/ci-agent-images/drivah:0.26.0"
       cpu: "4"
       memory: "4G"
       ephemeralStorage: "20G"
