@@ -34,7 +34,6 @@ linters:
     - err113
     - gofmt
     - gofumpt
-    - gomnd
     - gomodguard
     - nlreturn
     - paralleltest

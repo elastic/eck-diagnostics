@@ -27,5 +27,5 @@ steps:
     agents:
       image: "docker.elastic.co/ci-agent-images/drivah:0.26.0"
       cpu: "4"
-      memory: "4G"
+      memory: "6G"
       ephemeralStorage: "20G"
