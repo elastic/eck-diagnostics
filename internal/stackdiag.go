@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:9.1.0"
+	DiagnosticImage = "docker.elastic.co/eck-dev/support-diagnostics:9.3.1"
 
 	podOutputDir         = "/diagnostic-output"
 	podMainContainerName = "stack-diagnostics"
