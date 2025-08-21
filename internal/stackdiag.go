@@ -460,7 +460,7 @@ func extractEsInfo(typ string, ns string, resourceInfo *resource.Info) (bool, st
 		if err != nil {
 			return false, "", err
 		}
-		isTLS = !(found && disabled)
+		isTLS = !found || !disabled
 	}
 
 	var esName string
