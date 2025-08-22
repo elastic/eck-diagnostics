@@ -1,68 +1,19 @@
-run:
-  timeout: 300s
-
-linters-settings:
-  exhaustive:
-    default-signifies-exhaustive: true
-
-  goheader:
-    template: |-
-      Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
-      or more contributor license agreements. Licensed under the Elastic License 2.0;
-      you may not use this file except in compliance with the Elastic License 2.0.
-
-  nolintlint:
-    allow-leading-space: false
-    allow-unused: false
-    require-specific: true
-
-# Run `golangci-lint linters` to see the descriptions for the linters.
+version: "2"
 linters:
-  disable:
-    - cyclop
-    - depguard
-    - dupl
-    - forbidigo
-    - funlen
-    - gci
-    - gochecknoinits
-    - gocognit
-    - goconst
-    - gocyclo
-    - godot
-    - godox
-    - err113
-    - gofmt
-    - gofumpt
-    - gomodguard
-    - nlreturn
-    - paralleltest
-    - rowserrcheck
-    - sqlclosecheck
-    - stylecheck
-    - testpackage
-    - wrapcheck
-    - wsl
-
   enable:
     - asciicheck
     - bodyclose
+    - copyloopvar
     - dogsled
     - durationcheck
-    - errcheck
     - errorlint
     - exhaustive
-    - copyloopvar
     - forcetypeassert
     - gocritic
     - goheader
-    - goimports
     - goprintffuncname
     - gosec
-    - gosimple
-    - govet
     - importas
-    - ineffassign
     - makezero
     - misspell
     - nakedret
@@ -73,26 +24,71 @@ linters:
     - prealloc
     - predeclared
     - revive
-    - staticcheck
     - thelper
     - tparallel
-    - typecheck
     - unconvert
     - unparam
-    - unused
     - wastedassign
     - whitespace
-
+  disable:
+    - cyclop
+    - depguard
+    - dupl
+    - err113
+    - forbidigo
+    - funlen
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocyclo
+    - godot
+    - godox
+    - gomodguard
+    - nlreturn
+    - paralleltest
+    - rowserrcheck
+    - sqlclosecheck
+    - testpackage
+    - wrapcheck
+    - wsl
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    goheader:
+      template: |-
+        Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+        or more contributor license agreements. Licensed under the Elastic License 2.0;
+        you may not use this file except in compliance with the Elastic License 2.0.
+    nolintlint:
+      require-specific: true
+      allow-unused: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - goconst
+          - scopelint
+          - unparam
+        path: (^test/.*\.go|.*_test\.go)
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  fix: true
-
   max-issues-per-linter: 25
-
   max-same-issues: 0
-
-  exclude-rules:
-    - path: (^test/.*\.go|.*_test\.go)
-      linters:
-        - goconst
-        - scopelint
-        - unparam
+  fix: true
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

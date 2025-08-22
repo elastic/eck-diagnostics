@@ -430,9 +430,9 @@ func streamLogs(nsn types.NamespacedName, request rest.ResponseWrapper, out io.W
 		return err
 	}
 	defer stream.Close()
-	_, _ = out.Write([]byte(fmt.Sprintf("==== START logs for %s ====\n", nsn.String())))
+	_, _ = fmt.Fprintf(out, "==== START logs for %s ====\n", nsn.String())
 	defer func() {
-		_, _ = out.Write([]byte(fmt.Sprintf("==== END logs for %s ====\n", nsn.String())))
+		_, _ = fmt.Fprintf(out, "==== END logs for %s ====\n", nsn.String())
 	}()
 	r := bufio.NewReader(stream)
 	for {
