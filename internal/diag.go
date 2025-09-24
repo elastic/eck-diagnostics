@@ -145,6 +145,7 @@ func Run(params Params) error {
 		"common.k8s.elastic.co/type=agent",             // 1.4.0
 		"common.k8s.elastic.co/type=maps",              // 1.6.0
 		"common.k8s.elastic.co/type=logstash",          // 2.8.0
+		"common.k8s.elastic.co/type=epr",               // 2.8.0
 	}
 
 	operatorSelectors := make([]labels.Selector, len(operatorLabels))
@@ -185,6 +186,7 @@ LOOP:
 			"kibana",
 			"elasticsearch",
 			"apmserver",
+			"elasticpackageregistry",
 		}))
 
 		// Filters is intentionally empty here, as Elastic labels
