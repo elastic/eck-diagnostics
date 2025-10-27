@@ -13,8 +13,14 @@ spec:
       image: {{ .DiagnosticImage }}
       imagePullPolicy: IfNotPresent
       securityContext:
-        runAsUser: 1000
+        runAsNonRoot: true
         allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: true
+        seccompProfile:
+          type: RuntimeDefault
       {{ if (and .ESSecretName .ESSecretKey) }}
       env:
         - name: ES_PW
