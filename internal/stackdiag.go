@@ -60,6 +60,9 @@ var (
 
 	// logstashMinVersion is the ECK version in which Logstash support has been introduced.
 	logstashMinVersion = version.MustParseSemantic("2.8.0")
+
+	// eprMinVersion is the ECK version in which Elastic Package Registry support has been introduced.
+	eprMinVersion = version.MustParseSemantic("3.3.0")
 )
 
 // supportedStackDiagTypes returns the list of stack apps supported by elastic/support-diagnostics.
