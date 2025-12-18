@@ -60,6 +60,9 @@ var (
 
 	// logstashMinVersion is the ECK version in which Logstash support has been introduced.
 	logstashMinVersion = version.MustParseSemantic("2.8.0")
+
+	// stackConfigPolicyMinVersion is the ECK version in which StackConfigPolicy support has been introduced.
+	stackConfigPolicyMinVersion = version.MustParseSemantic("2.6.0")
 )
 
 // supportedStackDiagTypes returns the list of stack apps supported by elastic/support-diagnostics.
