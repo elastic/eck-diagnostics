@@ -226,6 +226,12 @@ LOOP:
 			}))
 		}
 
+		if maxOperatorVersion.AtLeast(stackConfigPolicyMinVersion) {
+			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
+				"stackconfigpolicy",
+			}))
+		}
+
 		zipFile.Add(map[string]func(io.Writer) error{
 			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
 				return kubectl.GetMeta("secrets", ns, writer)
