@@ -63,6 +63,9 @@ var (
 
 	// stackConfigPolicyMinVersion is the ECK version in which StackConfigPolicy support has been introduced.
 	stackConfigPolicyMinVersion = version.MustParseSemantic("2.6.0")
+
+	// eprMinVersion is the ECK version in which Elastic Package Registry support has been introduced.
+	eprMinVersion = version.MustParseSemantic("3.3.0")
 )
 
 // supportedStackDiagTypes returns the list of stack apps supported by elastic/support-diagnostics.
