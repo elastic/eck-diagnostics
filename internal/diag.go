@@ -145,6 +145,7 @@ func Run(params Params) error {
 		"common.k8s.elastic.co/type=agent",                  // 1.4.0
 		"common.k8s.elastic.co/type=maps",                   // 1.6.0
 		"common.k8s.elastic.co/type=logstash",               // 2.8.0
+		"common.k8s.elastic.co/type=autoopsagentpolicy",     // 3.3.0
 		"common.k8s.elastic.co/type=elasticpackageregistry", // 3.3.0
 	}
 
@@ -220,12 +221,16 @@ LOOP:
 				"logstash",
 			}))
 		}
+		if maxOperatorVersion.AtLeast(autoopsMinVersion) {
+			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
+				"autoopsagentpolicy",
+			}))
+		}
 		if maxOperatorVersion.AtLeast(eprMinVersion) {
 			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
 				"elasticpackageregistry",
 			}))
 		}
-
 		if maxOperatorVersion.AtLeast(stackConfigPolicyMinVersion) {
 			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
 				"stackconfigpolicy",

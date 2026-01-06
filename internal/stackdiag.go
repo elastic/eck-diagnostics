@@ -61,11 +61,14 @@ var (
 	// logstashMinVersion is the ECK version in which Logstash support has been introduced.
 	logstashMinVersion = version.MustParseSemantic("2.8.0")
 
-	// stackConfigPolicyMinVersion is the ECK version in which StackConfigPolicy support has been introduced.
-	stackConfigPolicyMinVersion = version.MustParseSemantic("2.6.0")
+	// autoopsMinVersion is the ECK version in which AutoOps support has been introduced.
+	autoopsMinVersion = version.MustParseSemantic("3.3.0")
 
 	// eprMinVersion is the ECK version in which Elastic Package Registry support has been introduced.
 	eprMinVersion = version.MustParseSemantic("3.3.0")
+
+	// stackConfigPolicyMinVersion is the ECK version in which StackConfigPolicy support has been introduced.
+	stackConfigPolicyMinVersion = version.MustParseSemantic("2.6.0")
 )
 
 // supportedStackDiagTypes returns the list of stack apps supported by elastic/support-diagnostics.
