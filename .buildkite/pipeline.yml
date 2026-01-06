@@ -7,14 +7,14 @@ steps:
   - label: ":go: lint"
     command: make lint
     agents:
-      image: "golang:1.25.1"
+      image: "golang:1.25.5"
       cpu: "4"
       memory: "8G"
 
   - label: ":go: tests"
     command: make unit-tests
     agents:
-      image: "golang:1.25.1"
+      image: "golang:1.25.5"
       cpu: "4"
       memory: "4G"
 
@@ -25,7 +25,7 @@ steps:
       - .buildkite/registry-login.sh
       - drivah build --push .
     agents:
-      image: "docker.elastic.co/ci-agent-images/drivah:0.28.0"
+      image: "docker.elastic.co/ci-agent-images/drivah:0.29.1"
       cpu: "4"
       memory: "6G"
       ephemeralStorage: "20G"
