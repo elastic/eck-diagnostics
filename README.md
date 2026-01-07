@@ -1,4 +1,5 @@
 # eck-diagnostics
+
 Diagnostic tooling for ECK installations
 
 [![Go](https://github.com/elastic/eck-diagnostics/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/elastic/eck-diagnostics/actions/workflows/go.yml)
@@ -7,7 +8,6 @@ Diagnostic tooling for ECK installations
 
 Go to the [releases](https://github.com/elastic/eck-diagnostics/releases) page and download the version matching your architecture. Unpack the gzip'ed tar archive and put the binary included in the archive somewhere in your PATH.
 
-
 ## Running
 
 Just execute the binary. On macOS versions with Gatekeeper enabled you have to explicitly allow the execution the first time round, as described in this [support article](https://support.apple.com/en-us/HT202491) (in the section "If you want to open an app that hasn’t been notarized or is from an unidentified developer"). 
@@ -15,13 +15,14 @@ Just execute the binary. On macOS versions with Gatekeeper enabled you have to e
 To run diagnostics, you need to specify at least the workload resource namespace(s). The operator namespace is set by default to the `elastic-system` namespace, where the ECK operator typically resides.
 
 For example, to run diagnostics for resource namespaces `a` and `b`:
+
 ```shell
 eck-diagnostics -r a,b
 ```
 
 A full list of available flags is reproduced here and is also printed when calling the `eck-diagnostics` binary with the `--help` or `-h` flag:
 
-```
+```shell
 Usage:
   eck-diagnostics [flags]
 
@@ -50,6 +51,7 @@ The eck-diagnostics retrieves Kubernetes API server resources and log files and,
 The following Kubernetes resources are retrieved from the cluster being diagnosed:
 
 ### Global resources
+
 * Kubernetes server version
 * Kubernetes nodes
 * PodSecurityPolicy
@@ -57,7 +59,8 @@ The following Kubernetes resources are retrieved from the cluster being diagnose
 * ClusterRoleBindings
 * StorageClass
 
-### In all operator and workload resource namespaces 
+### In all operator and workload resource namespaces
+
 * StatefulSet
 * Pod
 * Service
@@ -69,7 +72,9 @@ The following Kubernetes resources are retrieved from the cluster being diagnose
 * ServiceAccount
 
 ### In the workload resources namespaces
+
 In addition to the resources mentioned above, the following Kubernetes resources are retrieved:
+
 * ReplicaSet
 * Deployment
 * DaemonSet
@@ -77,16 +82,20 @@ In addition to the resources mentioned above, the following Kubernetes resources
 * PersistentVolumeClaim
 * Endpoint
 
-The ECK related custom resources are included in those namespaces as well: 
+The ECK related custom resources are included in those namespaces as well:
+
 * Agent
 * ApmServer
+* AutoOpsAgentPolicy
 * Beat
 * ElasticMapsServer
 * Elasticsearch
 * EnterpriseSearch
 * Kibana
+* PackageRegistry
 
 ### Logs
+
 In the operator namespaces (`-o, --operator-namespaces`) the operator's logs are collected, while in the workload resource namespaces all logs from Pods managed by ECK are collected.
 
 ## Filtering collected resources
@@ -101,7 +110,7 @@ The following example will run the diagnostics for Elastic resources in namespac
 eck-diagnostics -r a -f "elasticsearch=mycluster" -f "kibana=my-kb"
 ```
 
-To restrict the amount of logs collected by eck-diagnostics use the `-l, --log-selectors` flag (repeatedly). For example to only collect the logs for Kibana and the Elasticsearch master nodes that are not data nodes: 
+To restrict the amount of logs collected by eck-diagnostics use the `-l, --log-selectors` flag (repeatedly). For example to only collect the logs for Kibana and the Elasticsearch master nodes that are not data nodes:
 
 
 ```shell
@@ -109,10 +118,10 @@ eck-diagnostics -r a -f "elasticsearch=mycluster" -f "kibana=my-kb" -l 'elastics
 ```
 
 The log selector flags `-l` can also be used without the filter flags `-f` and [set-based Kubernetes requirement syntax](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#set-based-requirement) is also supported:
+
 ```shell
 eck-diagnostics -r a  -l 'apps.kubernetes.io/pod-index notin(0,1)'
 ```
-
 
 ### Filtered resources
 
@@ -136,7 +145,6 @@ The following resources are returned unfiltered:
 * PersistentVolume
 * ServiceAccount
 * Secret (metadata only)
-
 
 ### Using custom ECK installation methods
 
