@@ -45,6 +45,7 @@ type Params struct {
 	RunAgentDiagnostics     bool
 	Verbose                 bool
 	StackDiagnosticsTimeout time.Duration
+	AgentDiagnosticsTimeout time.Duration
 	Filters                 filters.Filters
 	LogFilters              filters.Filters
 }
@@ -61,14 +62,8 @@ func (dp Params) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
 	logger.Printf("ECK diagnostics with parameters: %+v", params)
-	stopCh := make(chan struct{})
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
-	go func() {
-		s := <-sigCh
-		logger.Printf("Aborting: %v received", s)
-		close(stopCh)
-	}()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
 	kubectl, err := NewKubectl(params.Kubeconfig, params.Verbose)
 	if err != nil {
@@ -164,7 +159,7 @@ func Run(params Params) error {
 LOOP:
 	for ns := range allNamespaces {
 		select {
-		case <-stopCh:
+		case <-ctx.Done():
 			break LOOP
 		default:
 		}
@@ -247,20 +242,20 @@ LOOP:
 
 		if params.RunStackDiagnostics {
 			runStackDiagnostics(
+				ctx,
 				kubectl,
 				ns,
 				zipFile,
 				params.Verbose,
 				params.DiagnosticImage,
 				params.StackDiagnosticsTimeout,
-				stopCh,
 				namespaceFilters,
 				maxOperatorVersion,
 			)
 		}
 
 		if params.RunAgentDiagnostics {
-			runAgentDiagnostics(kubectl, ns, zipFile, params.Verbose, stopCh, namespaceFilters)
+			runAgentDiagnostics(ctx, kubectl, ns, zipFile, params.Verbose, params.AgentDiagnosticsTimeout, namespaceFilters)
 		}
 	}
 

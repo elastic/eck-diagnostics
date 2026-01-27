@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal"
-	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
+	internalfilters "github.com/elastic/eck-diagnostics/internal/filters"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +43,7 @@ func main() {
 	cmd.Flags().BoolVar(&diagParams.RunAgentDiagnostics, "run-agent-diagnostics", false, "Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive")
 	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, operatorNamespaces, "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
 	cmd.Flags().StringSliceVarP(&diagParams.ResourcesNamespaces, resourcesNamespaces, "r", nil, "Comma-separated list of namespace(s) in which resources are managed")
-	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types %v)`, internal_filters.ValidTypes))
+	cmd.Flags().StringSliceVarP(&filters, "filters", "f", nil, fmt.Sprintf(`Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types %v)`, internalfilters.ValidTypes))
 	cmd.Flags().StringArrayVarP(&rawLogSelectors, "log-selectors", "l", nil, "Label selectors to restrict the logs to be collected. Can be specified more than once. Example: -l 'elasticsearch.k8s.elastic.co/node-master=true,elasticsearch.k8s.elastic.co/node-data!=true' -l common.k8s.elastic.co/type=kibana")
 	cmd.Flags().StringVar(&diagParams.ECKVersion, "eck-version", "", "ECK version in use, will try to autodetect if not specified")
 	cmd.Flags().StringVar(&diagParams.OutputDir, "output-directory", "", "Path where to output diagnostic results")
@@ -51,6 +51,7 @@ func main() {
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
 	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")
+	cmd.Flags().DurationVar(&diagParams.AgentDiagnosticsTimeout, "agent-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for each Elastic Agent diagnostic to complete")
 
 	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
 		exitWithError(err)
@@ -103,12 +104,12 @@ func validation(_ *cobra.Command, _ []string) error {
 }
 
 func parseFilters(_ *cobra.Command, _ []string) error {
-	filters, err := internal_filters.NewTypeFilter(filters)
+	filters, err := internalfilters.NewTypeFilter(filters)
 	if err != nil {
 		return err
 	}
 	diagParams.Filters = filters
-	logFilters, err := internal_filters.NewLabelFilter(rawLogSelectors)
+	logFilters, err := internalfilters.NewLabelFilter(rawLogSelectors)
 	if err != nil {
 		return err
 	}

@@ -14,14 +14,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/eck-diagnostics/internal/archive"
-	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
@@ -29,11 +28,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/kubectl/pkg/cmd/exec"
+	"k8s.io/client-go/tools/remotecommand"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/util/openapi"
+
+	"github.com/elastic/eck-diagnostics/internal/archive"
+	internalfilters "github.com/elastic/eck-diagnostics/internal/filters"
 )
 
 // Kubectl provides utilities based on the kubectl API.
@@ -97,73 +99,108 @@ func (c Kubectl) CheckNamespaces(ctx context.Context, nss []string) error {
 	return nil
 }
 
-func (c Kubectl) Copy(nsn types.NamespacedName, container string, path string, recordErr func(error)) (*io.PipeReader, error) {
-	execErrOut := io.Discard
+func (c Kubectl) Copy(ctx context.Context, nsn types.NamespacedName, container string, path string, recordErr func(error)) (*io.PipeReader, error) {
+	var execErrOut io.Writer
 	if c.verbose {
 		execErrOut = c.errOut
 	}
 	reader, outStream := io.Pipe()
-	options := &exec.ExecOptions{
-		StreamOptions: exec.StreamOptions{
-			IOStreams: genericclioptions.IOStreams{
-				In:     nil,
-				Out:    outStream,
-				ErrOut: execErrOut,
-			},
 
-			Namespace:     nsn.Namespace,
-			PodName:       nsn.Name,
-			ContainerName: container,
-		},
-		Config:    c.config,
-		PodClient: c.CoreV1(),
+	exec, err := c.createExecutor(nsn, corev1.PodExecOptions{
+		Container: container,
 		Command:   []string{"tar", "cf", "-", path},
-		Executor:  &exec.DefaultRemoteExecutor{},
+		Stdout:    true,
+		Stderr:    execErrOut != nil,
+	})
+	if err != nil {
+		return nil, err
 	}
+
 	go func() {
 		defer func() {
-			// TODO: this routine never terminates in my experiments and this code never runs
-			// we are effectively leaking go routines for every diagnostic we run
 			outStream.Close()
 		}()
-		err := options.Run()
+
+		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: outStream,
+			Stderr: execErrOut,
+		})
 		if err != nil {
 			recordErr(err)
 			return
 		}
 	}()
+
 	return reader, nil
 }
 
-func (c Kubectl) Exec(nsn types.NamespacedName, containerName string, cmd ...string) error {
-	execErrOut := io.Discard
+func (c Kubectl) Exec(ctx context.Context, nsn types.NamespacedName, containerName string, cmd ...string) error {
+	var execErrOut io.Writer
 	if c.verbose {
 		execErrOut = c.errOut
 	}
-	options := &exec.ExecOptions{
-		StreamOptions: exec.StreamOptions{
-			IOStreams: genericclioptions.IOStreams{
-				In:     nil,
-				Out:    nil,
-				ErrOut: execErrOut,
-			},
 
-			Namespace:     nsn.Namespace,
-			PodName:       nsn.Name,
-			ContainerName: containerName,
-		},
-		Config:    c.config,
-		PodClient: c.CoreV1(),
+	exec, err := c.createExecutor(nsn, corev1.PodExecOptions{
+		Container: containerName,
+		Stdout:    false,
+		Stderr:    execErrOut != nil,
 		Command:   cmd,
-		Executor:  &exec.DefaultRemoteExecutor{},
+	})
+	if err != nil {
+		return err
 	}
-	return options.Run()
+
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stderr: execErrOut,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c Kubectl) createExecutor(nsn types.NamespacedName, podExecOpts corev1.PodExecOptions) (remotecommand.Executor, error) {
+	req := c.Clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(nsn.Name).
+		Namespace(nsn.Namespace).
+		SubResource("exec")
+	newScheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(newScheme); err != nil {
+		return nil, err
+	}
+	parameterCodec := runtime.NewParameterCodec(newScheme)
+	req.VersionedParams(&podExecOpts, parameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(c.config, "POST", req.URL())
+	if err != nil {
+		return nil, err
+	}
+
+	// Fallback executor is default, unless feature flag is explicitly disabled.
+	if !cmdutil.RemoteCommandWebsockets.IsDisabled() {
+		// WebSocketExecutor must be "GET" method as described in RFC 6455 Sec. 4.1 (page 17).
+		wsExec, err := remotecommand.NewWebSocketExecutor(c.config, "GET", req.URL().String())
+		if err != nil {
+			return nil, err
+		}
+
+		exec, err = remotecommand.NewFallbackExecutor(wsExec, exec, func(err error) bool {
+			return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return exec, nil
 }
 
 // GetByLabel retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
 // If filters is not empty, this will only return resources within the cluster that its labels match
 // at least one of the filter's label selectors.
-func (c Kubectl) GetByLabel(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+func (c Kubectl) GetByLabel(resource, namespace string, filters internalfilters.Filters, w io.Writer) error {
 	return c.getFiltered(resource, namespace, w,
 		func(object metav1.Object) bool {
 			return filters.Matches(object.GetLabels())
@@ -174,7 +211,7 @@ func (c Kubectl) GetByLabel(resource, namespace string, filters internal_filters
 // GetByName retrieves the K8s objects of type resource in namespace and marshals them into the writer w.
 // If filters is not empty, this will only return resources within the cluster that its name matches
 // at least one of the filter's type+name pair.
-func (c Kubectl) GetByName(resource, namespace string, filters internal_filters.Filters, w io.Writer) error {
+func (c Kubectl) GetByName(resource, namespace string, filters internalfilters.Filters, w io.Writer) error {
 	return c.getFiltered(resource, namespace, w,
 		func(object metav1.Object) bool {
 			return filters.Contains(object.GetName(), resource)
@@ -356,7 +393,7 @@ func (c Kubectl) Describe(resource, prefix, namespace string, w io.Writer) error
 }
 
 // Logs mimics "kubectl logs -l selector" and writes the result to writers produced by out when given a filename.
-func (c Kubectl) Logs(namespace string, selector string, filters internal_filters.Filters, out func(string) (io.Writer, error)) error {
+func (c Kubectl) Logs(namespace string, selector string, filters internalfilters.Filters, out func(string) (io.Writer, error)) error {
 	builder := c.factory.NewBuilder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
 		NamespaceParam(namespace).
