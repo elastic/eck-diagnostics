@@ -35,7 +35,7 @@ import (
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	"github.com/elastic/eck-diagnostics/internal/extraction"
-	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
+	internalfilters "github.com/elastic/eck-diagnostics/internal/filters"
 )
 
 const (
@@ -128,8 +128,8 @@ type diagJobState struct {
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration, stopCh chan struct{}) *diagJobState {
-	ctx, cancelFunc := context.WithCancel(context.Background())
+func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration) *diagJobState {
+	ctx, cancelFunc := context.WithCancel(ctx)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		k,
 		jobPollingInterval,
@@ -148,10 +148,6 @@ func newDiagJobState(k *Kubectl, ns string, verbose bool, image string, jobTimeo
 		diagnosticImage: image,
 		jobTimeout:      jobTimeout,
 	}
-	go func() {
-		<-stopCh
-		cancelFunc()
-	}()
 	return state
 }
 
@@ -249,7 +245,7 @@ func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *archive.ZipFile
 		return
 	}
 	nsn := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
-	reader, err := ds.kubectl.Copy(nsn, podMainContainerName, podOutputDir, file.AddError)
+	reader, err := ds.kubectl.Copy(ds.context, nsn, podMainContainerName, podOutputDir, file.AddError)
 	if err != nil {
 		file.AddError(err)
 		return
@@ -387,16 +383,16 @@ func (ds *diagJobState) detectImageErrors(pod *corev1.Pod) error {
 // runStackDiagnostics extracts diagnostic data from all clusters in the given namespace ns using the official
 // Elasticsearch support diagnostics.
 func runStackDiagnostics(
+	ctx context.Context,
 	k *Kubectl, ns string,
 	zipFile *archive.ZipFile,
 	verbose bool,
 	image string,
 	jobTimeout time.Duration,
-	stopCh chan struct{},
-	filters internal_filters.Filters,
+	filters internalfilters.Filters,
 	eckVersion *version.Version,
 ) {
-	state := newDiagJobState(k, ns, verbose, image, jobTimeout, stopCh)
+	state := newDiagJobState(ctx, k, ns, verbose, image, jobTimeout)
 
 	for _, typ := range supportedStackDiagTypesFor(eckVersion) {
 		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {
@@ -408,11 +404,12 @@ func runStackDiagnostics(
 	if len(state.jobs) == 0 {
 		return
 	}
+
 	state.extractJobResults(zipFile)
 }
 
 // scheduleJobs lists all resources of type typ and schedules a diagnostic job for each of them
-func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internal_filters.Filters) error {
+func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobState, typ string, filters internalfilters.Filters) error {
 	resources, err := k.getResources(typ, ns)
 	if err != nil {
 		return err // not recoverable

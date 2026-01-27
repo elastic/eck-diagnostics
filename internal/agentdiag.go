@@ -5,23 +5,25 @@
 package internal
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/elastic/eck-diagnostics/internal/archive"
-	"github.com/elastic/eck-diagnostics/internal/extraction"
-	internal_filters "github.com/elastic/eck-diagnostics/internal/filters"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/resource"
+
+	"github.com/elastic/eck-diagnostics/internal/archive"
+	"github.com/elastic/eck-diagnostics/internal/extraction"
+	internalfilters "github.com/elastic/eck-diagnostics/internal/filters"
 )
 
 // based on eck-operator code the agent container name is constant "agent"
 const agentContainerName = "agent"
 
-func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, stopCh chan struct{}, filters internal_filters.Filters) {
+func runAgentDiagnostics(ctx context.Context, k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, diagTimeout time.Duration, filters internalfilters.Filters) {
 	outputFile := time.Now().Format("eck-agent-diag-2006-01-02T15-04-05Z.zip")
 	resources, err := k.getResourcesMatching("pod", ns, "common.k8s.elastic.co/type=agent")
 	if err != nil {
@@ -30,7 +32,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 	}
 	if err := resources.Visit(func(info *resource.Info, _ error) error {
 		select {
-		case <-stopCh:
+		case <-ctx.Done():
 			return errors.New("aborting Elastic Agent diagnostic")
 		default:
 			// continue processing agents
@@ -50,7 +52,7 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 		}
 		ver, err := version.ParseSemantic(v)
 		if err != nil {
-			zipFile.AddError(err)
+			zipFile.AddError(fmt.Errorf("failed to parse agent version %q: %w", v, err))
 			return nil
 		}
 
@@ -65,10 +67,13 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 
 		nsn := types.NamespacedName{Namespace: ns, Name: resourceName}
 
-		needsCleanup := diagnosticForAgentPod(nsn, k, outputFile, zipFile, verbose)
+		diagCtx, diagCancel := context.WithTimeout(ctx, diagTimeout)
+		defer diagCancel()
+		needsCleanup := diagnosticForAgentPod(diagCtx, nsn, k, outputFile, zipFile, verbose)
 
 		// no matter what happened: try to clean up the diagnostic archive in the agent container
-		if err := k.Exec(nsn, agentContainerName, "rm", outputFile); err != nil {
+		// use ctx for cleanup since diagCtx may have been cancelled due to timeout
+		if err := k.Exec(ctx, nsn, agentContainerName, "rm", outputFile); err != nil {
 			// but only report any errors during cleaning up if there is a likelihood that we created an archive to clean up
 			// in the first place
 			if needsCleanup {
@@ -84,14 +89,14 @@ func runAgentDiagnostics(k *Kubectl, ns string, zipFile *archive.ZipFile, verbos
 // diagnosticForAgentPod runs the diagnostic sub command in the agent container identified by nsn. Returns a boolean indicating
 // whether the diagnostic command has run and there is a diagnostic archive in the container to clean up after to avoid filling up
 // the containers file system.
-func diagnosticForAgentPod(nsn types.NamespacedName, k *Kubectl, outputFile string, zipFile *archive.ZipFile, verbose bool) bool {
+func diagnosticForAgentPod(ctx context.Context, nsn types.NamespacedName, k *Kubectl, outputFile string, zipFile *archive.ZipFile, verbose bool) bool {
 	logger.Printf("Extracting agent diagnostics for %s", nsn)
-	if err := k.Exec(nsn, agentContainerName, "elastic-agent", "diagnostics", "collect", "-f", outputFile); err != nil {
+	if err := k.Exec(ctx, nsn, agentContainerName, "elastic-agent", "diagnostics", "collect", "-f", outputFile); err != nil {
 		zipFile.AddError(fmt.Errorf("while extracting agent diagnostics: %w", err))
 		return false
 	}
 
-	reader, err := k.Copy(nsn, agentContainerName, outputFile, zipFile.AddError)
+	reader, err := k.Copy(ctx, nsn, agentContainerName, outputFile, zipFile.AddError)
 	if err != nil {
 		zipFile.AddError(err)
 		return true
