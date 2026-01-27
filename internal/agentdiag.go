@@ -114,7 +114,7 @@ func runAgentDiagnosticsExec(ctx context.Context, k *Kubectl, jobs []*agentDiagn
 	}
 
 	workCh := make(chan *agentDiagnosticJob, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		wg.Go(func() {
 			for job := range workCh {
 				logger.Printf("Collecting agent diagnostics for %s", job.nsn)
