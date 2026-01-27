@@ -108,11 +108,7 @@ func runAgentDiagnosticsExec(ctx context.Context, k *Kubectl, jobs []*agentDiagn
 	var wg sync.WaitGroup
 
 	// Spawn worker goroutines
-	numWorkers := concurrency
-	if len(jobs) < numWorkers {
-		numWorkers = len(jobs)
-	}
-
+	numWorkers := min(concurrency, len(jobs))
 	workCh := make(chan *agentDiagnosticJob, numWorkers)
 	for range numWorkers {
 		wg.Go(func() {
