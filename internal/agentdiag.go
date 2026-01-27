@@ -6,8 +6,8 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -23,21 +23,23 @@ import (
 // based on eck-operator code the agent container name is constant "agent"
 const agentContainerName = "agent"
 
-func runAgentDiagnostics(ctx context.Context, k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, diagTimeout time.Duration, filters internalfilters.Filters) {
-	outputFile := time.Now().Format("eck-agent-diag-2006-01-02T15-04-05Z.zip")
+// agentDiagnosticJob represents a diagnostic collection job for a single agent pod.
+type agentDiagnosticJob struct {
+	nsn        types.NamespacedName
+	outputFile string
+	execErr    error // error from running elastic-agent diagnostics
+}
+
+func runAgentDiagnostics(ctx context.Context, k *Kubectl, ns string, zipFile *archive.ZipFile, verbose bool, diagTimeout time.Duration, concurrency int, filters internalfilters.Filters) {
 	resources, err := k.getResourcesMatching("pod", ns, "common.k8s.elastic.co/type=agent")
 	if err != nil {
 		zipFile.AddError(err)
 		return // unrecoverable let's return
 	}
-	if err := resources.Visit(func(info *resource.Info, _ error) error {
-		select {
-		case <-ctx.Done():
-			return errors.New("aborting Elastic Agent diagnostic")
-		default:
-			// continue processing agents
-		}
 
+	// Collect all agent pods that need diagnostics
+	var jobs []*agentDiagnosticJob
+	if err := resources.Visit(func(info *resource.Info, _ error) error {
 		resourceName := info.Name
 		labels, err := meta.NewAccessor().Labels(info.Object)
 		if err != nil {
@@ -65,52 +67,103 @@ func runAgentDiagnostics(ctx context.Context, k *Kubectl, ns string, zipFile *ar
 			return nil
 		}
 
-		nsn := types.NamespacedName{Namespace: ns, Name: resourceName}
-
-		diagCtx, diagCancel := context.WithTimeout(ctx, diagTimeout)
-		defer diagCancel()
-		needsCleanup := diagnosticForAgentPod(diagCtx, nsn, k, outputFile, zipFile, verbose)
-
-		// no matter what happened: try to clean up the diagnostic archive in the agent container
-		// use ctx for cleanup since diagCtx may have been cancelled due to timeout
-		if err := k.Exec(ctx, nsn, agentContainerName, "rm", outputFile); err != nil {
-			// but only report any errors during cleaning up if there is a likelihood that we created an archive to clean up
-			// in the first place
-			if needsCleanup {
-				zipFile.AddError(fmt.Errorf("while cleaning up agent container %s: %w", nsn, err))
-			}
-		}
+		jobs = append(jobs, &agentDiagnosticJob{
+			nsn:        types.NamespacedName{Namespace: ns, Name: resourceName},
+			outputFile: fmt.Sprintf("eck-agent-diag-%s.zip", resourceName),
+		})
 		return nil
 	}); err != nil {
 		zipFile.AddError(err)
+		return
+	}
+
+	if len(jobs) == 0 {
+		return
+	}
+
+	// Run elastic-agent diagnostics concurrently (this part can be slow and prone to errors)
+	runAgentDiagnosticsExec(ctx, k, jobs, diagTimeout, concurrency)
+
+	// Sequentially copy results into zip and clean up
+	for _, job := range jobs {
+		select {
+		case <-ctx.Done():
+			logger.Printf("Aborting Elastic Agent diagnostics: %v", ctx.Err())
+			return
+		default:
+		}
+
+		if job.execErr == nil {
+			copyAgentDiagnostics(ctx, k, job, zipFile, verbose)
+		} else {
+			zipFile.AddError(fmt.Errorf("while collecting agent diagnostics for %s: %w", job.nsn, job.execErr))
+		}
+
+		cleanupAgentDiagnostics(ctx, k, job)
 	}
 }
 
-// diagnosticForAgentPod runs the diagnostic sub command in the agent container identified by nsn. Returns a boolean indicating
-// whether the diagnostic command has run and there is a diagnostic archive in the container to clean up after to avoid filling up
-// the containers file system.
-func diagnosticForAgentPod(ctx context.Context, nsn types.NamespacedName, k *Kubectl, outputFile string, zipFile *archive.ZipFile, verbose bool) bool {
-	logger.Printf("Extracting agent diagnostics for %s", nsn)
-	if err := k.Exec(ctx, nsn, agentContainerName, "elastic-agent", "diagnostics", "collect", "-f", outputFile); err != nil {
-		zipFile.AddError(fmt.Errorf("while extracting agent diagnostics: %w", err))
-		return false
+// runAgentDiagnosticsExec runs elastic-agent diagnostics concurrently across all jobs.
+func runAgentDiagnosticsExec(ctx context.Context, k *Kubectl, jobs []*agentDiagnosticJob, diagTimeout time.Duration, concurrency int) {
+	var wg sync.WaitGroup
+
+	// Spawn worker goroutines
+	numWorkers := concurrency
+	if len(jobs) < numWorkers {
+		numWorkers = len(jobs)
 	}
 
-	reader, err := k.Copy(ctx, nsn, agentContainerName, outputFile, zipFile.AddError)
+	workCh := make(chan *agentDiagnosticJob, numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		wg.Go(func() {
+			for job := range workCh {
+				logger.Printf("Collecting agent diagnostics for %s", job.nsn)
+				diagCtx, diagCancel := context.WithTimeout(ctx, diagTimeout)
+				job.execErr = k.Exec(diagCtx, job.nsn, agentContainerName, "elastic-agent", "diagnostics", "collect", "-f", job.outputFile)
+				diagCancel()
+			}
+		})
+	}
+
+	// Send work to workers
+sendLoop:
+	for _, job := range jobs {
+		select {
+		case workCh <- job:
+		case <-ctx.Done():
+			break sendLoop
+		}
+	}
+	close(workCh)
+	wg.Wait()
+}
+
+// copyAgentDiagnostics copies the diagnostic archive from the agent container into the zip file.
+func copyAgentDiagnostics(ctx context.Context, k *Kubectl, job *agentDiagnosticJob, zipFile *archive.ZipFile, verbose bool) {
+	logger.Printf("Extracting agent diagnostics for %s", job.nsn)
+
+	reader, err := k.Copy(ctx, job.nsn, agentContainerName, job.outputFile, zipFile.AddError)
 	if err != nil {
 		zipFile.AddError(err)
-		return true
+		return
 	}
 
 	source := extraction.RemoteSource{
-		Namespace:    nsn.Namespace,
-		PodName:      nsn.Name, // no separate diagnostic Pod in this case
+		Namespace:    job.nsn.Namespace,
+		PodName:      job.nsn.Name,
 		Typ:          "agent",
-		ResourceName: nsn.Name,
+		ResourceName: job.nsn.Name,
 		PodOutputDir: "/",
 	}
 	if err := extraction.UntarIntoZip(reader, source, zipFile, verbose); err != nil {
-		zipFile.AddError(fmt.Errorf("while copying diagnostic data from Pod %s into diagnostic archive: %w", nsn, err))
+		zipFile.AddError(fmt.Errorf("while copying diagnostic data from Pod %s into diagnostic archive: %w", job.nsn, err))
 	}
-	return true
+}
+
+// cleanupAgentDiagnostics removes the diagnostic archive from the agent container.
+// Errors are only logged if exec succeeded (i.e., a file was likely created).
+func cleanupAgentDiagnostics(ctx context.Context, k *Kubectl, job *agentDiagnosticJob) {
+	if err := k.Exec(ctx, job.nsn, agentContainerName, "rm", job.outputFile); err != nil && job.execErr == nil {
+		logger.Printf("while cleaning up agent container %s: %v", job.nsn, err)
+	}
 }
