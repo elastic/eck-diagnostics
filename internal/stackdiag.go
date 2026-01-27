@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"text/template"
@@ -250,10 +251,18 @@ func (ds *diagJobState) extractFromRemote(pod *corev1.Pod, file *archive.ZipFile
 		file.AddError(err)
 		return
 	}
+	defer func() {
+		// Drain and close the reader. k.Copy returns a pipe connected to a goroutine streaming
+		// from the remote tar command. If we exit early (e.g., UntarIntoZip fails), the pipe
+		// buffer fills and the goroutine blocks forever. Draining and closing unblocks it.
+		_, _ = io.Copy(io.Discard, reader)
+		_ = reader.Close()
+	}()
 	if err := extraction.UntarIntoZip(reader, job.RemoteSource, file, ds.verbose); err != nil {
 		file.AddError(err)
 		return
 	}
+
 	err = ds.completeJob(job)
 	if err != nil {
 		file.AddError(err)

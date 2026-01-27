@@ -7,6 +7,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -143,6 +144,14 @@ func copyAgentDiagnostics(ctx context.Context, k *Kubectl, job *agentDiagnosticJ
 		zipFile.AddError(err)
 		return
 	}
+
+	defer func() {
+		// Drain and close the reader. k.Copy returns a pipe connected to a goroutine streaming
+		// from the remote tar command. If we exit early (e.g., UntarIntoZip fails), the pipe
+		// buffer fills and the goroutine blocks forever. Draining and closing unblocks it.
+		_, _ = io.Copy(io.Discard, reader)
+		_ = reader.Close()
+	}()
 
 	source := extraction.RemoteSource{
 		Namespace:    job.nsn.Namespace,
