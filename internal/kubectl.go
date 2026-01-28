@@ -103,8 +103,6 @@ func (c Kubectl) Copy(ctx context.Context, nsn types.NamespacedName, container s
 	var execErrOut io.Writer
 	if c.verbose {
 		execErrOut = c.errOut
-	} else {
-		execErrOut = io.Discard
 	}
 	reader, outStream := io.Pipe()
 
@@ -112,7 +110,7 @@ func (c Kubectl) Copy(ctx context.Context, nsn types.NamespacedName, container s
 		Container: container,
 		Command:   []string{"tar", "cf", "-", path},
 		Stdout:    true,
-		Stderr:    true,
+		Stderr:    execErrOut != nil,
 	})
 	if err != nil {
 		return nil, err
