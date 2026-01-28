@@ -52,6 +52,7 @@ func main() {
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
 	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")
 	cmd.Flags().DurationVar(&diagParams.AgentDiagnosticsTimeout, "agent-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for each Elastic Agent diagnostic to complete")
+	cmd.Flags().IntVar(&diagParams.AgentDiagnosticsConcurrency, "agent-diagnostics-concurrency", 5, "Maximum number of concurrent Elastic Agent diagnostics to run")
 
 	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
 		exitWithError(err)
@@ -76,6 +77,9 @@ func validation(_ *cobra.Command, _ []string) error {
 	}
 	if filepath.Ext(diagParams.OutputName) != ".zip" {
 		return fmt.Errorf("output-name extension must end in '.zip'")
+	}
+	if diagParams.AgentDiagnosticsConcurrency < 1 {
+		return fmt.Errorf("agent-diagnostics-concurrency must be at least 1")
 	}
 
 	type validations struct {

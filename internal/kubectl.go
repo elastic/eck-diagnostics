@@ -138,12 +138,14 @@ func (c Kubectl) Exec(ctx context.Context, nsn types.NamespacedName, containerNa
 	var execErrOut io.Writer
 	if c.verbose {
 		execErrOut = c.errOut
+	} else {
+		execErrOut = io.Discard
 	}
 
 	exec, err := c.createExecutor(nsn, corev1.PodExecOptions{
 		Container: containerName,
 		Stdout:    false,
-		Stderr:    execErrOut != nil,
+		Stderr:    true,
 		Command:   cmd,
 	})
 	if err != nil {
