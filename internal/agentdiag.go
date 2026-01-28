@@ -105,6 +105,7 @@ func runAgentDiagnostics(ctx context.Context, k *Kubectl, ns string, zipFile *ar
 }
 
 // runAgentDiagnosticsExec runs elastic-agent diagnostics concurrently across all jobs.
+// Note: It mutates each job's execErr field to store the result of the exec operation.
 func runAgentDiagnosticsExec(ctx context.Context, k *Kubectl, jobs []*agentDiagnosticJob, diagTimeout time.Duration, concurrency int) {
 	var wg sync.WaitGroup
 
