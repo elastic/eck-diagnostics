@@ -5,7 +5,7 @@
 #
 # build go binaries
 #
-FROM docker.elastic.co/wolfi/go:1.25.6-r1@sha256:7c0e0f68f4ab0d7ccc2ef0d6c4309363b8c562846247904921dd072898c205b8 as builder
+FROM docker.elastic.co/wolfi/go:1.25.7-r0@sha256:23734b230b4ff5407980a72a3c35fe14995af39646ea413788f2a0a629684f96 as builder
 
 ARG VERSION
 ARG SHA1
