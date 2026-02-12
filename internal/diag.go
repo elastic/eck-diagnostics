@@ -141,7 +141,7 @@ func Run(params Params) error {
 		"common.k8s.elastic.co/type=agent",                  // 1.4.0
 		"common.k8s.elastic.co/type=maps",                   // 1.6.0
 		"common.k8s.elastic.co/type=logstash",               // 2.8.0
-		"common.k8s.elastic.co/type=autoopsagentpolicy",     // 3.3.0
+		"common.k8s.elastic.co/type=autoops-agent",          // 3.3.0
 		"common.k8s.elastic.co/type=elasticpackageregistry", // 3.3.0
 	}
 
