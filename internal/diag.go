@@ -224,7 +224,7 @@ LOOP:
 		}
 		if maxOperatorVersion.AtLeast(eprMinVersion) {
 			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
-				"elasticpackageregistry",
+				"packageregistry",
 			}))
 		}
 		if maxOperatorVersion.AtLeast(stackConfigPolicyMinVersion) {

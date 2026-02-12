@@ -15,7 +15,7 @@ import (
 
 var (
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
-	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps", "logstash"}
+	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps", "logstash", "package-registry", "autoops-agent"}
 	Empty      = make(TypeFilters)
 )
 
@@ -285,12 +285,30 @@ func validateType(typ string) error {
 // against any runtime object's labels.
 func buildSelectorForTypeFilter(typ, name string) labels.Selector {
 	nameAttr := "name"
-	if typ == "elasticsearch" {
+	var set labels.Set
+	switch typ {
+	case "elasticsearch":
 		nameAttr = "cluster-name"
-	}
-	set := labels.Set{
-		"common.k8s.elastic.co/type":                       typ,
-		fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
+		set = labels.Set{
+			"common.k8s.elastic.co/type":                       typ,
+			fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
+		}
+	case "autoops-agent":
+		nameAttr = "policy-name"
+		set = labels.Set{
+			"common.k8s.elastic.co/type":                       typ,
+			fmt.Sprintf("autoops.k8s.elastic.co/%s", nameAttr): name,
+		}
+	case "package-registry":
+		set = labels.Set{
+			"common.k8s.elastic.co/type":                               typ,
+			fmt.Sprintf("packageregistry.k8s.elastic.co/%s", nameAttr): name,
+		}
+	default:
+		set = labels.Set{
+			"common.k8s.elastic.co/type":                       typ,
+			fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
+		}
 	}
 	return labels.SelectorFromValidatedSet(set)
 }
