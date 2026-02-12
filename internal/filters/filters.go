@@ -6,11 +6,11 @@ package filters
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/utils/strings/slices"
 )
 
 var (
