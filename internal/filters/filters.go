@@ -19,6 +19,7 @@ import (
 type ResourceDescriptor struct {
 	FilterType  string // user-facing type, e.g. "package-registry"
 	CRDName     string // Kubernetes CRD resource name, e.g. "packageregistry" (defaults to FilterType)
+	CommonType  string // value for common.k8s.elastic.co/type (defaults to FilterType)
 	LabelPrefix string // label prefix before .k8s.elastic.co, e.g. "packageregistry" (defaults to FilterType)
 	NameAttr    string // name attribute in label key (defaults to "name")
 }
@@ -37,6 +38,13 @@ func (d ResourceDescriptor) labelPrefix() string {
 	return d.LabelPrefix
 }
 
+func (d ResourceDescriptor) commonType() string {
+	if d.CommonType == "" {
+		return d.FilterType
+	}
+	return d.CommonType
+}
+
 func (d ResourceDescriptor) nameAttr() string {
 	if d.NameAttr == "" {
 		return "name"
@@ -49,10 +57,10 @@ var (
 	// user-facing filter types, and label conventions.
 	resourceDescriptors = []ResourceDescriptor{
 		{FilterType: "agent"},
-		{FilterType: "apm", CRDName: "apmserver"},
+		{FilterType: "apm", CRDName: "apmserver", CommonType: "apm-server"},
 		{FilterType: "beat"},
 		{FilterType: "elasticsearch", NameAttr: "cluster-name"},
-		{FilterType: "enterprisesearch"},
+		{FilterType: "enterprisesearch", CommonType: "enterprise-search"},
 		{FilterType: "kibana"},
 		{FilterType: "maps", CRDName: "elasticmapsserver"},
 		{FilterType: "logstash"},
@@ -341,7 +349,7 @@ func validateType(typ string) error {
 func buildSelectorForTypeFilter(typ, name string) labels.Selector {
 	desc := descriptorByFilterType(typ)
 	set := labels.Set{
-		"common.k8s.elastic.co/type": typ,
+		"common.k8s.elastic.co/type": desc.commonType(),
 		fmt.Sprintf("%s.k8s.elastic.co/%s", desc.labelPrefix(), desc.nameAttr()): name,
 	}
 	return labels.SelectorFromValidatedSet(set)

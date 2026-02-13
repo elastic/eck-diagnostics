@@ -52,7 +52,7 @@ func TestNewTypeFilter(t *testing.T) {
 					Type: "apm",
 					Name: "myapm",
 					Selector: labels.NewSelector().
-						Add(mustParseRequirement("common.k8s.elastic.co/type", "apm")).
+						Add(mustParseRequirement("common.k8s.elastic.co/type", "apm-server")).
 						Add(mustParseRequirement("apm.k8s.elastic.co/name", "myapm")),
 				}},
 			}),
@@ -94,7 +94,7 @@ func TestNewTypeFilter(t *testing.T) {
 					Type: "enterprisesearch",
 					Name: "mycluster",
 					Selector: labels.NewSelector().
-						Add(mustParseRequirement("common.k8s.elastic.co/type", "enterprisesearch")).
+						Add(mustParseRequirement("common.k8s.elastic.co/type", "enterprise-search")).
 						Add(mustParseRequirement("enterprisesearch.k8s.elastic.co/name", "mycluster")),
 				}},
 			}),
