@@ -29,7 +29,7 @@ Usage:
 Flags:
       --diagnostic-image string              Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:9.3.1")
       --eck-version string                   ECK version in use, will try to autodetect if not specified
-  -f, --filters strings                      Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps logstash])
+  -f, --filters strings                      Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps logstash package-registry autoops-agent stackconfigpolicy])
   -h, --help                                 help for eck-diagnostics
       --kubeconfig string                    optional path to kube config, defaults to $HOME/.kube/config
   -l, --log-selectors stringArray            Label selectors to restrict the logs to be collected. Can be specified more than once. Example: -l 'elasticsearch.k8s.elastic.co/node-master=true,elasticsearch.k8s.elastic.co/node-data!=true' -l common.k8s.elastic.co/type=kibana.
@@ -93,6 +93,7 @@ The ECK related custom resources are included in those namespaces as well:
 * EnterpriseSearch
 * Kibana
 * PackageRegistry
+* StackConfigPolicy
 
 ### Logs
 

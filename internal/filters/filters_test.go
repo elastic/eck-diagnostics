@@ -129,6 +129,48 @@ func TestNewTypeFilter(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid name and package-registry type is valid",
+			filters: []string{"package-registry=my-registry"},
+			want: TypeFilters(map[string][]TypeFilter{
+				"package-registry": {{
+					Type: "package-registry",
+					Name: "my-registry",
+					Selector: labels.NewSelector().
+						Add(mustParseRequirement("common.k8s.elastic.co/type", "package-registry")).
+						Add(mustParseRequirement("packageregistry.k8s.elastic.co/name", "my-registry")),
+				}},
+			}),
+			wantErr: false,
+		},
+		{
+			name:    "valid name and autoops-agent type is valid",
+			filters: []string{"autoops-agent=my-policy"},
+			want: TypeFilters(map[string][]TypeFilter{
+				"autoops-agent": {{
+					Type: "autoops-agent",
+					Name: "my-policy",
+					Selector: labels.NewSelector().
+						Add(mustParseRequirement("common.k8s.elastic.co/type", "autoops-agent")).
+						Add(mustParseRequirement("autoops.k8s.elastic.co/policy-name", "my-policy")),
+				}},
+			}),
+			wantErr: false,
+		},
+		{
+			name:    "valid name and stackconfigpolicy type is valid",
+			filters: []string{"stackconfigpolicy=my-policy"},
+			want: TypeFilters(map[string][]TypeFilter{
+				"stackconfigpolicy": {{
+					Type: "stackconfigpolicy",
+					Name: "my-policy",
+					Selector: labels.NewSelector().
+						Add(mustParseRequirement("common.k8s.elastic.co/type", "stackconfigpolicy")).
+						Add(mustParseRequirement("stackconfigpolicy.k8s.elastic.co/name", "my-policy")),
+				}},
+			}),
+			wantErr: false,
+		},
+		{
 			name:    "multiple valid filters return correctly",
 			filters: []string{"elasticsearch=mycluster", "kibana=my-kb", "agent=my-agent"},
 			want: TypeFilters(map[string][]TypeFilter{
@@ -553,6 +595,32 @@ func TestOr(t *testing.T) {
 			require.Equal(t, tt.wantContains, f.Contains(nameFixture, typeFixture), "contains")
 			require.Equal(t, tt.wantMatches, f.Matches(tt.labels), "matches")
 			require.Equal(t, tt.wantEmpty, f.Empty(), "empty")
+		})
+	}
+}
+
+func TestFilterTypeFromCRDName(t *testing.T) {
+	tests := []struct {
+		crdName string
+		want    string
+	}{
+		{crdName: "apmserver", want: "apm"},
+		{crdName: "elasticmapsserver", want: "maps"},
+		{crdName: "autoopsagentpolicy", want: "autoops-agent"},
+		{crdName: "packageregistry", want: "package-registry"},
+		// CRD names that match the filter type directly
+		{crdName: "elasticsearch", want: "elasticsearch"},
+		{crdName: "enterprisesearch", want: "enterprisesearch"},
+		{crdName: "kibana", want: "kibana"},
+		{crdName: "maps", want: "maps"},
+		{crdName: "stackconfigpolicy", want: "stackconfigpolicy"},
+		{crdName: "unknown", want: "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.crdName, func(t *testing.T) {
+			got := FilterTypeFromCRDName(tt.crdName)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
