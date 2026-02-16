@@ -136,13 +136,13 @@ func Run(params Params) error {
 		"common.k8s.elastic.co/type=kibana",
 		"common.k8s.elastic.co/type=apm-server",
 		// the below were introduced in later version but label selector will just return no result:
-		"common.k8s.elastic.co/type=enterprise-search",      // 1.2.0
-		"common.k8s.elastic.co/type=beat",                   // 1.2.0
-		"common.k8s.elastic.co/type=agent",                  // 1.4.0
-		"common.k8s.elastic.co/type=maps",                   // 1.6.0
-		"common.k8s.elastic.co/type=logstash",               // 2.8.0
-		"common.k8s.elastic.co/type=autoops-agent",          // 3.3.0
-		"common.k8s.elastic.co/type=elasticpackageregistry", // 3.3.0
+		"common.k8s.elastic.co/type=enterprise-search", // 1.2.0
+		"common.k8s.elastic.co/type=beat",              // 1.2.0
+		"common.k8s.elastic.co/type=agent",             // 1.4.0
+		"common.k8s.elastic.co/type=maps",              // 1.6.0
+		"common.k8s.elastic.co/type=logstash",          // 2.8.0
+		"common.k8s.elastic.co/type=autoops-agent",     // 3.3.0
+		"common.k8s.elastic.co/type=package-registry",  // 3.3.0
 	}
 
 	operatorSelectors := make([]labels.Selector, len(operatorLabels))
@@ -224,7 +224,7 @@ LOOP:
 		}
 		if maxOperatorVersion.AtLeast(eprMinVersion) {
 			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
-				"elasticpackageregistry",
+				"packageregistry",
 			}))
 		}
 		if maxOperatorVersion.AtLeast(stackConfigPolicyMinVersion) {

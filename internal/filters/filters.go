@@ -13,11 +13,74 @@ import (
 	"k8s.io/apimachinery/pkg/util/errors"
 )
 
+// ResourceDescriptor describes the mapping between a user-facing filter type,
+// the Kubernetes CRD resource name, and the label conventions used by the operator.
+// Empty fields default to the FilterType.
+type ResourceDescriptor struct {
+	FilterType  string // user-facing type, e.g. "package-registry"
+	CRDName     string // Kubernetes CRD resource name, e.g. "packageregistry" (defaults to FilterType)
+	CommonType  string // value for common.k8s.elastic.co/type (defaults to FilterType)
+	LabelPrefix string // label prefix before .k8s.elastic.co, e.g. "packageregistry" (defaults to FilterType)
+	NameAttr    string // name attribute in label key (defaults to "name")
+}
+
+func (d ResourceDescriptor) crdName() string {
+	if d.CRDName == "" {
+		return d.FilterType
+	}
+	return d.CRDName
+}
+
+func (d ResourceDescriptor) labelPrefix() string {
+	if d.LabelPrefix == "" {
+		return d.FilterType
+	}
+	return d.LabelPrefix
+}
+
+func (d ResourceDescriptor) commonType() string {
+	if d.CommonType == "" {
+		return d.FilterType
+	}
+	return d.CommonType
+}
+
+func (d ResourceDescriptor) nameAttr() string {
+	if d.NameAttr == "" {
+		return "name"
+	}
+	return d.NameAttr
+}
+
 var (
+	// resourceDescriptors is the single source of truth for the mapping between CRD resource names,
+	// user-facing filter types, and label conventions.
+	resourceDescriptors = []ResourceDescriptor{
+		{FilterType: "agent"},
+		{FilterType: "apm", CRDName: "apmserver", CommonType: "apm-server"},
+		{FilterType: "beat"},
+		{FilterType: "elasticsearch", NameAttr: "cluster-name"},
+		{FilterType: "enterprisesearch", CommonType: "enterprise-search"},
+		{FilterType: "kibana"},
+		{FilterType: "maps", CRDName: "elasticmapsserver"},
+		{FilterType: "logstash"},
+		{FilterType: "package-registry", CRDName: "packageregistry", LabelPrefix: "packageregistry"},
+		{FilterType: "autoops-agent", CRDName: "autoopsagentpolicy", LabelPrefix: "autoops", NameAttr: "policy-name"},
+		{FilterType: "stackconfigpolicy"},
+	}
 	// ValidTypes are the valid types of Elastic resources that are supported by the filtering system.
-	ValidTypes = []string{"agent", "apm", "beat", "elasticsearch", "enterprisesearch", "kibana", "maps", "logstash"}
+	ValidTypes = validTypes()
 	Empty      = make(TypeFilters)
 )
+
+// validTypes returns the list of valid types of Elastic resources that are supported by the filtering system.
+func validTypes() []string {
+	types := make([]string, len(resourceDescriptors))
+	for i := range resourceDescriptors {
+		types[i] = resourceDescriptors[i].FilterType
+	}
+	return types
+}
 
 type Filters interface {
 	Empty() bool
@@ -284,13 +347,33 @@ func validateType(typ string) error {
 //
 // against any runtime object's labels.
 func buildSelectorForTypeFilter(typ, name string) labels.Selector {
-	nameAttr := "name"
-	if typ == "elasticsearch" {
-		nameAttr = "cluster-name"
-	}
+	desc := descriptorByFilterType(typ)
 	set := labels.Set{
-		"common.k8s.elastic.co/type":                       typ,
-		fmt.Sprintf("%s.k8s.elastic.co/%s", typ, nameAttr): name,
+		"common.k8s.elastic.co/type": desc.commonType(),
+		fmt.Sprintf("%s.k8s.elastic.co/%s", desc.labelPrefix(), desc.nameAttr()): name,
 	}
 	return labels.SelectorFromValidatedSet(set)
+}
+
+// descriptorByFilterType returns the ResourceDescriptor for the given filter type.
+// If no descriptor is found, it returns a zero-value descriptor which will default
+// to using the filter type as-is for all fields.
+func descriptorByFilterType(typ string) ResourceDescriptor {
+	for _, d := range resourceDescriptors {
+		if d.FilterType == typ {
+			return d
+		}
+	}
+	return ResourceDescriptor{FilterType: typ}
+}
+
+// FilterTypeFromCRDName maps a Kubernetes resource name to a user-facing filter type.
+// If no mapping is found, it returns the resource name as-is.
+func FilterTypeFromCRDName(crdName string) string {
+	for _, d := range resourceDescriptors {
+		if d.crdName() == crdName {
+			return d.FilterType
+		}
+	}
+	return crdName
 }

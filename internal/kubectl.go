@@ -214,9 +214,10 @@ func (c Kubectl) GetByLabel(resource, namespace string, filters internalfilters.
 // If filters is not empty, this will only return resources within the cluster that its name matches
 // at least one of the filter's type+name pair.
 func (c Kubectl) GetByName(resource, namespace string, filters internalfilters.Filters, w io.Writer) error {
+	filterType := internalfilters.FilterTypeFromCRDName(resource)
 	return c.getFiltered(resource, namespace, w,
 		func(object metav1.Object) bool {
-			return filters.Contains(object.GetName(), resource)
+			return filters.Contains(object.GetName(), filterType)
 		},
 		filters.Empty())
 }
