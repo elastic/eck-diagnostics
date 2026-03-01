@@ -17,6 +17,28 @@ import (
 )
 
 func Test_jobTemplate_imagePullSecrets(t *testing.T) {
+	tests := []struct {
+		name             string
+		imagePullSecrets []string
+		want             []corev1.LocalObjectReference
+	}{
+		{
+			name:             "secrets set when flag provided",
+			imagePullSecrets: []string{"my-registry-secret", "another-secret"},
+			want:             []corev1.LocalObjectReference{{Name: "my-registry-secret"}, {Name: "another-secret"}},
+		},
+		{
+			name:             "secrets absent when flag not provided",
+			imagePullSecrets: nil,
+			want:             nil,
+		},
+		{
+			name:             "secrets absent when empty slice provided",
+			imagePullSecrets: []string{},
+			want:             nil,
+		},
+	}
+
 	baseData := map[string]interface{}{
 		"PodName":           "test-pod",
 		"DiagnosticImage":   "docker.elastic.co/eck-dev/support-diagnostics:latest",
@@ -30,50 +52,32 @@ func Test_jobTemplate_imagePullSecrets(t *testing.T) {
 		"MainContainerName": "stack-diagnostics",
 	}
 
-	renderPod := func(imagePullSecrets []string) corev1.Pod {
-		t.Helper()
-		data := make(map[string]interface{}, len(baseData)+1)
-		for k, v := range baseData {
-			data[k] = v
-		}
-		data["ImagePullSecrets"] = imagePullSecrets
-
-		tpl, err := template.New("job").Parse(jobTemplate)
-		if err != nil {
-			t.Fatalf("parsing template: %v", err)
-		}
-		buf := new(bytes.Buffer)
-		if err := tpl.Execute(buf, data); err != nil {
-			t.Fatalf("executing template: %v", err)
-		}
-		var pod corev1.Pod
-		if err := yaml.Unmarshal(buf.Bytes(), &pod); err != nil {
-			t.Fatalf("unmarshaling pod: %v\nrendered:\n%s", err, buf.String())
-		}
-		return pod
+	tpl, err := template.New("job").Parse(jobTemplate)
+	if err != nil {
+		t.Fatalf("parsing template: %v", err)
 	}
 
-	t.Run("imagePullSecrets set when flag provided", func(t *testing.T) {
-		pod := renderPod([]string{"my-registry-secret", "another-secret"})
-		want := []corev1.LocalObjectReference{{Name: "my-registry-secret"}, {Name: "another-secret"}}
-		if !reflect.DeepEqual(pod.Spec.ImagePullSecrets, want) {
-			t.Errorf("ImagePullSecrets = %v, want %v", pod.Spec.ImagePullSecrets, want)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make(map[string]interface{}, len(baseData)+1)
+			for k, v := range baseData {
+				data[k] = v
+			}
+			data["ImagePullSecrets"] = tt.imagePullSecrets
 
-	t.Run("imagePullSecrets absent when flag not provided", func(t *testing.T) {
-		pod := renderPod(nil)
-		if len(pod.Spec.ImagePullSecrets) != 0 {
-			t.Errorf("expected no ImagePullSecrets, got %v", pod.Spec.ImagePullSecrets)
-		}
-	})
-
-	t.Run("imagePullSecrets absent when empty slice provided", func(t *testing.T) {
-		pod := renderPod([]string{})
-		if len(pod.Spec.ImagePullSecrets) != 0 {
-			t.Errorf("expected no ImagePullSecrets, got %v", pod.Spec.ImagePullSecrets)
-		}
-	})
+			buf := new(bytes.Buffer)
+			if err := tpl.Execute(buf, data); err != nil {
+				t.Fatalf("executing template: %v", err)
+			}
+			var pod corev1.Pod
+			if err := yaml.Unmarshal(buf.Bytes(), &pod); err != nil {
+				t.Fatalf("unmarshaling pod: %v\nrendered:\n%s", err, buf.String())
+			}
+			if !reflect.DeepEqual(pod.Spec.ImagePullSecrets, tt.want) {
+				t.Errorf("ImagePullSecrets = %v, want %v", pod.Spec.ImagePullSecrets, tt.want)
+			}
+		})
+	}
 }
 
 func Test_supportedStackDiagTypesFor(t *testing.T) {
