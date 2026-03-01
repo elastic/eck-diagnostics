@@ -40,7 +40,7 @@ Flags:
       --image-pull-secrets strings           Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods
       --run-agent-diagnostics                Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
       --run-stack-diagnostics                Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
-      --stack-diagnostics-timeout duration   Maximum time to wait for Elaticsearch and Kibana diagnostics to complete (default 5m0s)
+      --stack-diagnostics-timeout duration   Maximum time to wait for Elasticsearch and Kibana diagnostics to complete (default 5m0s)
       --verbose                              Verbose mode
   -v, --version                              version for eck-diagnostics
 ```

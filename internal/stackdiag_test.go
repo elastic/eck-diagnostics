@@ -5,12 +5,76 @@
 package internal
 
 import (
+	"bytes"
 	_ "embed"
 	"reflect"
 	"testing"
+	"text/template"
 
+	"github.com/ghodss/yaml"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/version"
 )
+
+func Test_jobTemplate_imagePullSecrets(t *testing.T) {
+	baseData := map[string]interface{}{
+		"PodName":           "test-pod",
+		"DiagnosticImage":   "docker.elastic.co/eck-dev/support-diagnostics:latest",
+		"Namespace":         "default",
+		"ESSecretName":      "es-secret",
+		"ESSecretKey":       "elastic",
+		"SVCName":           "elasticsearch-es-http",
+		"Type":              "api",
+		"TLS":               true,
+		"OutputDir":         "/diagnostic-output",
+		"MainContainerName": "stack-diagnostics",
+	}
+
+	renderPod := func(imagePullSecrets []string) corev1.Pod {
+		t.Helper()
+		data := make(map[string]interface{}, len(baseData)+1)
+		for k, v := range baseData {
+			data[k] = v
+		}
+		data["ImagePullSecrets"] = imagePullSecrets
+
+		tpl, err := template.New("job").Parse(jobTemplate)
+		if err != nil {
+			t.Fatalf("parsing template: %v", err)
+		}
+		buf := new(bytes.Buffer)
+		if err := tpl.Execute(buf, data); err != nil {
+			t.Fatalf("executing template: %v", err)
+		}
+		var pod corev1.Pod
+		if err := yaml.Unmarshal(buf.Bytes(), &pod); err != nil {
+			t.Fatalf("unmarshaling pod: %v\nrendered:\n%s", err, buf.String())
+		}
+		return pod
+	}
+
+	t.Run("imagePullSecrets set when flag provided", func(t *testing.T) {
+		pod := renderPod([]string{"my-registry-secret", "another-secret"})
+		want := []corev1.LocalObjectReference{{Name: "my-registry-secret"}, {Name: "another-secret"}}
+		if !reflect.DeepEqual(pod.Spec.ImagePullSecrets, want) {
+			t.Errorf("ImagePullSecrets = %v, want %v", pod.Spec.ImagePullSecrets, want)
+		}
+	})
+
+	t.Run("imagePullSecrets absent when flag not provided", func(t *testing.T) {
+		pod := renderPod(nil)
+		if len(pod.Spec.ImagePullSecrets) != 0 {
+			t.Errorf("expected no ImagePullSecrets, got %v", pod.Spec.ImagePullSecrets)
+		}
+	})
+
+	t.Run("imagePullSecrets absent when empty slice provided", func(t *testing.T) {
+		pod := renderPod([]string{})
+		if len(pod.Spec.ImagePullSecrets) != 0 {
+			t.Errorf("expected no ImagePullSecrets, got %v", pod.Spec.ImagePullSecrets)
+		}
+	})
+}
 
 func Test_supportedStackDiagTypesFor(t *testing.T) {
 	type args struct {
