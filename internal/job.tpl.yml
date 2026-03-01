@@ -8,12 +8,12 @@ metadata:
 spec:
   terminationGracePeriodSeconds: 0
   automountServiceAccountToken: false
-  {{ if .ImagePullSecrets }}
+  {{- if .ImagePullSecrets }}
   imagePullSecrets:
-  {{ range .ImagePullSecrets }}
+  {{- range .ImagePullSecrets }}
     - name: {{ . }}
-  {{ end }}
-  {{ end }}
+  {{- end }}
+  {{- end }}
   containers:
     - name: {{ .MainContainerName }}
       image: {{ .DiagnosticImage }}

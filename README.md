@@ -37,6 +37,7 @@ Flags:
       --output-directory string              Path where to output diagnostic results
   -n, --output-name string                   Name of the output diagnostics file (default "eck-diagnostics-2024-06-25T09-28-37.zip")
   -r, --resources-namespaces strings         Comma-separated list of namespace(s) in which resources are managed
+      --image-pull-secrets strings           Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods
       --run-agent-diagnostics                Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
       --run-stack-diagnostics                Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
       --stack-diagnostics-timeout duration   Maximum time to wait for Elaticsearch and Kibana diagnostics to complete (default 5m0s)
