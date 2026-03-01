@@ -123,13 +123,14 @@ type diagJobState struct {
 	jobs            map[string]*diagJob
 	context         context.Context
 	cancelFunc      context.CancelFunc
-	verbose         bool
-	diagnosticImage string
-	jobTimeout      time.Duration
+	verbose          bool
+	diagnosticImage  string
+	jobTimeout       time.Duration
+	imagePullSecrets []string
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration) *diagJobState {
+func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration, imagePullSecrets []string) *diagJobState {
 	ctx, cancelFunc := context.WithCancel(ctx)
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		k,
@@ -146,8 +147,9 @@ func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, i
 		cancelFunc:      cancelFunc,
 		context:         ctx,
 		verbose:         verbose,
-		diagnosticImage: image,
-		jobTimeout:      jobTimeout,
+		diagnosticImage:  image,
+		jobTimeout:       jobTimeout,
+		imagePullSecrets: imagePullSecrets,
 	}
 	return state
 }
@@ -174,6 +176,7 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName
 		"TLS":               tls,
 		"OutputDir":         podOutputDir,
 		"MainContainerName": podMainContainerName,
+		"ImagePullSecrets":  ds.imagePullSecrets,
 	}
 	err = tpl.Execute(buffer, data)
 	if err != nil {
@@ -400,8 +403,9 @@ func runStackDiagnostics(
 	jobTimeout time.Duration,
 	filters internalfilters.Filters,
 	eckVersion *version.Version,
+	imagePullSecrets []string,
 ) {
-	state := newDiagJobState(ctx, k, ns, verbose, image, jobTimeout)
+	state := newDiagJobState(ctx, k, ns, verbose, image, jobTimeout, imagePullSecrets)
 
 	for _, typ := range supportedStackDiagTypesFor(eckVersion) {
 		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {

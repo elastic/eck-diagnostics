@@ -53,6 +53,7 @@ func main() {
 	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")
 	cmd.Flags().DurationVar(&diagParams.AgentDiagnosticsTimeout, "agent-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for each Elastic Agent diagnostic to complete")
 	cmd.Flags().IntVar(&diagParams.AgentDiagnosticsConcurrency, "agent-diagnostics-concurrency", 5, "Maximum number of concurrent Elastic Agent diagnostics to run")
+	cmd.Flags().StringSliceVar(&diagParams.ImagePullSecrets, "image-pull-secrets", nil, "Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods")
 
 	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
 		exitWithError(err)
