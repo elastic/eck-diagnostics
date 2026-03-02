@@ -47,6 +47,7 @@ type Params struct {
 	StackDiagnosticsTimeout     time.Duration
 	AgentDiagnosticsTimeout     time.Duration
 	AgentDiagnosticsConcurrency int
+	ImagePullSecrets            []string
 	Filters                     filters.Filters
 	LogFilters                  filters.Filters
 }
@@ -252,6 +253,7 @@ LOOP:
 				params.StackDiagnosticsTimeout,
 				namespaceFilters,
 				maxOperatorVersion,
+				params.ImagePullSecrets,
 			)
 		}
 

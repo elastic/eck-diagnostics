@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/elastic/eck-diagnostics/internal"
@@ -50,9 +51,10 @@ func main() {
 	cmd.Flags().StringVarP(&diagParams.OutputName, "output-name", "n", fmt.Sprintf("eck-diagnostics-%s.zip", time.Now().Format("2006-01-02T15-04-05")), "Name of the output diagnostics file")
 	cmd.Flags().StringVar(&diagParams.Kubeconfig, "kubeconfig", "", "optional path to kube config, defaults to $HOME/.kube/config")
 	cmd.Flags().BoolVar(&diagParams.Verbose, "verbose", false, "Verbose mode")
-	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elaticsearch and Kibana diagnostics to complete")
+	cmd.Flags().DurationVar(&diagParams.StackDiagnosticsTimeout, "stack-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for Elasticsearch and Kibana diagnostics to complete")
 	cmd.Flags().DurationVar(&diagParams.AgentDiagnosticsTimeout, "agent-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for each Elastic Agent diagnostic to complete")
 	cmd.Flags().IntVar(&diagParams.AgentDiagnosticsConcurrency, "agent-diagnostics-concurrency", 5, "Maximum number of concurrent Elastic Agent diagnostics to run")
+	cmd.Flags().StringSliceVar(&diagParams.ImagePullSecrets, "image-pull-secrets", nil, "Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods")
 
 	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
 		exitWithError(err)
@@ -103,6 +105,14 @@ func validation(_ *cobra.Command, _ []string) error {
 				return fmt.Errorf("%s cannot be an empty string", v.name)
 			}
 		}
+	}
+
+	for i, s := range diagParams.ImagePullSecrets {
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "" {
+			return fmt.Errorf("image-pull-secrets[%d] cannot be an empty string", i)
+		}
+		diagParams.ImagePullSecrets[i] = trimmed
 	}
 	return nil
 }
