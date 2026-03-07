@@ -5,7 +5,7 @@
 #
 # build go binaries
 #
-FROM docker.elastic.co/wolfi/go:1.26.0-r0@sha256:a4d9e3c5efc1ce0b8e3409a26b97aaf7c6e9683234e099a6075350cf49fa226d as builder
+FROM docker.elastic.co/wolfi/go:1.26.1-r0@sha256:fb0b0b9c54251811f2c1bcb2b71c794fcee8273d601b94c000854fd8c32a8a20 as builder
 
 ARG VERSION
 ARG SHA1
@@ -28,7 +28,7 @@ RUN make build-binary generate-notice.txt
 #
 # package binaries in a lighter final image
 #
-FROM docker.elastic.co/wolfi/chainguard-base:latest@sha256:6cae7f6f358f71e0030af9e30805333f05dc5bb297bbd083a345d8aed37b4bbb
+FROM docker.elastic.co/wolfi/chainguard-base:latest@sha256:52799bf31ce800d69bfb0f0750e080b8dd6f8c5e54a6a4a124bad89c6768562f
 
 ARG IMAGE_TAG
 ENV IMAGE_TAG=$IMAGE_TAG
