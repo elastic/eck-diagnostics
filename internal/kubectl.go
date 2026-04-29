@@ -305,7 +305,8 @@ func (c Kubectl) getResourcesMatching(resource string, namespace string, selecto
 
 // GetMeta retrieves the metadata for the K8s objects of type resource and marshals them into writer w.
 // It tries to elide sensitive data like secret contents or kubectl last-applied configuration annotations.
-func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
+// If keepSecretData is true, secret data will be preserved in the output.
+func (c Kubectl) GetMeta(resource, namespace string, keepSecretData bool, w io.Writer) error {
 	r := c.factory.NewBuilder().
 		Unstructured().
 		NamespaceParam(namespace).DefaultNamespace().AllNamespaces(false).
@@ -345,8 +346,10 @@ func (c Kubectl) GetMeta(resource, namespace string, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		// remove the actual secret data
-		delete(unstructured, "data")
+		if !keepSecretData {
+			// remove the actual secret data
+			delete(unstructured, "data")
+		}
 		// or spec for other objects
 		delete(unstructured, "spec")
 		metas.Items = append(metas.Items, unstructured)

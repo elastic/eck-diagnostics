@@ -48,6 +48,7 @@ type Params struct {
 	AgentDiagnosticsTimeout     time.Duration
 	AgentDiagnosticsConcurrency int
 	ImagePullSecrets            []string
+	KeepSecretData              bool
 	Filters                     filters.Filters
 	LogFilters                  filters.Filters
 }
@@ -236,7 +237,7 @@ LOOP:
 
 		zipFile.Add(map[string]func(io.Writer) error{
 			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
-				return kubectl.GetMeta("secrets", ns, writer)
+				return kubectl.GetMeta("secrets", ns, params.KeepSecretData, writer)
 			},
 		})
 
