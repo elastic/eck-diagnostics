@@ -55,7 +55,7 @@ func main() {
 	cmd.Flags().DurationVar(&diagParams.AgentDiagnosticsTimeout, "agent-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for each Elastic Agent diagnostic to complete")
 	cmd.Flags().IntVar(&diagParams.AgentDiagnosticsConcurrency, "agent-diagnostics-concurrency", 5, "Maximum number of concurrent Elastic Agent diagnostics to run")
 	cmd.Flags().StringSliceVar(&diagParams.ImagePullSecrets, "image-pull-secrets", nil, "Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods")
-	cmd.Flags().BoolVar(&diagParams.KeepSecretData, "keep-secret-data", false, "Keep secret data in the diagnostics archive. Warning: credentials will not be redacted and appear as plain text")
+	cmd.Flags().BoolVar(&diagParams.KeepSecretData, "keep-secret-data", false, "Keep secret data in the diagnostics archive. Warning: credentials will not be redacted and appear as plain text in the archive")
 
 	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
 		exitWithError(err)

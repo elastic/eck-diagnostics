@@ -65,6 +65,9 @@ func (dp Params) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
 	logger.Printf("ECK diagnostics with parameters: %+v", params)
+	if params.KeepSecretData {
+		logger.Printf("WARNING: --keep-secret-data is enabled. Secret data will NOT be redacted and may appear as plain text in the archive.")
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 

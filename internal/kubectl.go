@@ -350,7 +350,7 @@ func (c Kubectl) GetMeta(resource, namespace string, keepSecretData bool, w io.W
 			// remove the actual secret data
 			delete(unstructured, "data")
 		}
-		// or spec for other objects
+		// always remove spec for other objects
 		delete(unstructured, "spec")
 		metas.Items = append(metas.Items, unstructured)
 	}
