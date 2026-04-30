@@ -48,6 +48,7 @@ type Params struct {
 	AgentDiagnosticsTimeout     time.Duration
 	AgentDiagnosticsConcurrency int
 	ImagePullSecrets            []string
+	KeepSecretData              bool
 	Filters                     filters.Filters
 	LogFilters                  filters.Filters
 }
@@ -64,6 +65,9 @@ func (dp Params) AllNamespaces() []string {
 // It produces a zip file with the contents as a side effect.
 func Run(params Params) error {
 	logger.Printf("ECK diagnostics with parameters: %+v", params)
+	if params.KeepSecretData {
+		logger.Printf("WARNING: --keep-secret-data is enabled. Secret data will NOT be redacted and may appear as plain text in the archive.")
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
@@ -236,7 +240,7 @@ LOOP:
 
 		zipFile.Add(map[string]func(io.Writer) error{
 			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
-				return kubectl.GetMeta("secrets", ns, writer)
+				return kubectl.GetMeta("secrets", ns, params.KeepSecretData, writer)
 			},
 		})
 

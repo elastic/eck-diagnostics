@@ -117,12 +117,12 @@ func (d *diagJob) MarkDone() {
 
 // diagJobState captures the state of running a set of jobs to extract diagnostics from Elastic Stack applications.
 type diagJobState struct {
-	ns              string
-	kubectl         *Kubectl
-	informer        cache.SharedInformer
-	jobs            map[string]*diagJob
-	context         context.Context
-	cancelFunc      context.CancelFunc
+	ns               string
+	kubectl          *Kubectl
+	informer         cache.SharedInformer
+	jobs             map[string]*diagJob
+	context          context.Context
+	cancelFunc       context.CancelFunc
 	verbose          bool
 	diagnosticImage  string
 	jobTimeout       time.Duration
@@ -140,13 +140,13 @@ func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, i
 			options.LabelSelector = "app.kubernetes.io/name=eck-diagnostics"
 		}))
 	state := &diagJobState{
-		jobs:            map[string]*diagJob{},
-		ns:              ns,
-		kubectl:         k,
-		informer:        factory.Core().V1().Pods().Informer(),
-		cancelFunc:      cancelFunc,
-		context:         ctx,
-		verbose:         verbose,
+		jobs:             map[string]*diagJob{},
+		ns:               ns,
+		kubectl:          k,
+		informer:         factory.Core().V1().Pods().Informer(),
+		cancelFunc:       cancelFunc,
+		context:          ctx,
+		verbose:          verbose,
 		diagnosticImage:  image,
 		jobTimeout:       jobTimeout,
 		imagePullSecrets: imagePullSecrets,
