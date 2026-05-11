@@ -131,7 +131,7 @@ type diagJobState struct {
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
 func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration, imagePullSecrets []string) *diagJobState {
-	ctx, cancelFunc := context.WithCancel(ctx)
+	ctx, cancelFunc := context.WithCancel(ctx) //nolint:gosec
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		k,
 		jobPollingInterval,

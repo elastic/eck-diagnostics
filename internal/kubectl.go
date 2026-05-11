@@ -20,7 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
@@ -33,6 +32,7 @@ import (
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/util/openapi"
+	"k8s.io/streaming/pkg/httpstream"
 
 	"github.com/elastic/eck-diagnostics/internal/archive"
 	internalfilters "github.com/elastic/eck-diagnostics/internal/filters"
