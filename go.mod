@@ -13,7 +13,7 @@ require (
 	k8s.io/cli-runtime v0.36.0
 	k8s.io/client-go v0.36.0
 	k8s.io/kubectl v0.36.0
-	k8s.io/streaming v0.36.0
+	k8s.io/streaming v0.36.1
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
 )
 
