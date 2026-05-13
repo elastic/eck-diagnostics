@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -441,26 +442,65 @@ func (c Kubectl) Logs(namespace string, selector string, filters internalfilters
 	return nil
 }
 
-// requestLogs requests the logs for pod and writes the result to writers produced by out when given a filename.
+// requestLogs writes the diagnostic logs for pod to writers produced by out when given a filename.
+// When the pod is in the Running phase, the current logs of all its containers are written to logs.txt.
+// Regardless of phase, the previous-instance logs of every (init or regular) container that has restarted
+// at least once are then captured via writePreviousLogs.
 func (c Kubectl) requestLogs(pod corev1.Pod, out func(string) (io.Writer, error)) error {
-	// if Pod not in running state let's not extract logs, trying to get logs from previous container does not seem to work
-	// reliably and might lead to extra misleading noise in the diagnostic data
-	if pod.Status.Phase != corev1.PodRunning {
+	if pod.Status.Phase == corev1.PodRunning {
+		logFn := polymorphichelpers.LogsForObjectFn
+		reqs, err := logFn(c.factory, &pod, &corev1.PodLogOptions{}, 20*time.Second, true)
+		if err != nil {
+			return err
+		}
+		writer, err := out(archive.Path(pod.Namespace, "pod", pod.Name, "logs.txt"))
+		if err != nil {
+			return err
+		}
+		for _, r := range reqs {
+			if err := streamLogs(types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}, r, writer); err != nil {
+				return err
+			}
+		}
+	}
+
+	return c.writePreviousLogs(pod, out)
+}
+
+// writePreviousLogs captures the previous-instance logs for every (init or regular) container in pod
+// whose RestartCount is greater than zero, concatenating them into a single previous-logs.txt file
+// produced by out. Init container logs precede regular container logs. The file is not produced when
+// no container has restarted. Per-container request or stream errors are recorded as ERROR markers in
+// the file and do not abort the capture of the remaining containers.
+func (c Kubectl) writePreviousLogs(pod corev1.Pod, out func(string) (io.Writer, error)) error {
+	var restartedContainerNames []string
+	for _, cs := range slices.Concat(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses) {
+		if cs.RestartCount > 0 {
+			restartedContainerNames = append(restartedContainerNames, cs.Name)
+		}
+	}
+	if len(restartedContainerNames) == 0 {
 		return nil
 	}
 
+	writer, err := out(archive.Path(pod.Namespace, "pod", pod.Name, "previous-logs.txt"))
+	if err != nil {
+		return err
+	}
+
 	logFn := polymorphichelpers.LogsForObjectFn
-	reqs, err := logFn(c.factory, &pod, &corev1.PodLogOptions{}, 20*time.Second, true)
-	if err != nil {
-		return err
-	}
-	writer, err := out(archive.Path(pod.Namespace, "pod", pod.Name, "logs.txt"))
-	if err != nil {
-		return err
-	}
-	for _, r := range reqs {
-		if err := streamLogs(types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}, r, writer); err != nil {
-			return err
+	for _, containerName := range restartedContainerNames {
+		opts := &corev1.PodLogOptions{Previous: true, Container: containerName}
+		reqs, err := logFn(c.factory, &pod, opts, 20*time.Second, false)
+		if err != nil {
+			fmt.Fprintf(writer, "==== ERROR requesting previous logs for %s/%s container %s: %v ====\n", pod.Namespace, pod.Name, containerName, err)
+			continue
+		}
+		nsn := types.NamespacedName{Namespace: pod.Namespace, Name: containerName}
+		for _, r := range reqs {
+			if err := streamLogs(nsn, r, writer); err != nil {
+				fmt.Fprintf(writer, "==== ERROR streaming previous logs for %s/%s container %s: %v ====\n", pod.Namespace, pod.Name, containerName, err)
+			}
 		}
 	}
 	return nil
