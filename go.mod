@@ -15,6 +15,7 @@ require (
 	k8s.io/kubectl v0.36.1
 	k8s.io/streaming v0.36.1
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
+	software.sslmate.com/src/go-pkcs12 v0.7.1
 )
 
 require (
@@ -56,6 +57,7 @@ require (
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
