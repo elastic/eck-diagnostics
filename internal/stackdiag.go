@@ -482,7 +482,12 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			keystoreSecretName = name
 		}
 
-		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, keystoreSecretName, isTLS))
+		if err := state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, keystoreSecretName, isTLS); err != nil {
+			// scheduleJob failed before the job was registered, so terminateJob will never run for
+			// this resource. Clean up the keystore Secret here to avoid leaving key material behind.
+			recordErr(deleteKeystoreSecret(context.Background(), state.kubectl, ns, keystoreSecretName))
+			recordErr(err)
+		}
 		return nil
 	})
 }
