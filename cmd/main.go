@@ -14,6 +14,7 @@ import (
 
 	"github.com/elastic/eck-diagnostics/internal"
 	internalfilters "github.com/elastic/eck-diagnostics/internal/filters"
+	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 )
 
@@ -23,9 +24,10 @@ const (
 )
 
 var (
-	filters         []string
-	rawLogSelectors []string
-	diagParams      = internal.Params{}
+	filters              []string
+	rawLogSelectors      []string
+	podTemplatePatchPath string
+	diagParams           = internal.Params{}
 )
 
 func main() {
@@ -55,6 +57,7 @@ func main() {
 	cmd.Flags().DurationVar(&diagParams.AgentDiagnosticsTimeout, "agent-diagnostics-timeout", 5*time.Minute, "Maximum time to wait for each Elastic Agent diagnostic to complete")
 	cmd.Flags().IntVar(&diagParams.AgentDiagnosticsConcurrency, "agent-diagnostics-concurrency", 5, "Maximum number of concurrent Elastic Agent diagnostics to run")
 	cmd.Flags().StringSliceVar(&diagParams.ImagePullSecrets, "image-pull-secrets", nil, "Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods")
+	cmd.Flags().StringVar(&podTemplatePatchPath, "pod-template-patch", "", "Path to a YAML or JSON file containing a strategic merge patch applied to the diagnostic Pod before it is created. Use this to set labels, annotations, resource requests, securityContext, serviceAccountName, and similar fields required by cluster policies. Object fields are merged; list fields (containers, env, volumes) are merged by the 'name' key. Warning: the patch must not remove the 'stack-diagnostics' container or its command and args, otherwise the tool will exit with an error.")
 	cmd.Flags().BoolVar(&diagParams.KeepSecretData, "keep-secret-data", false, "Keep secret data in the diagnostics archive. Warning: credentials will not be redacted and appear as plain text in the archive")
 
 	if err := cmd.MarkFlagRequired(resourcesNamespaces); err != nil {
@@ -114,6 +117,20 @@ func validation(_ *cobra.Command, _ []string) error {
 			return fmt.Errorf("image-pull-secrets[%d] cannot be an empty string", i)
 		}
 		diagParams.ImagePullSecrets[i] = trimmed
+	}
+
+	if podTemplatePatchPath != "" {
+		patchBytes, err := os.ReadFile(podTemplatePatchPath)
+		if err != nil {
+			return fmt.Errorf("reading pod-template-patch: %w", err)
+		}
+		if len(strings.TrimSpace(string(patchBytes))) == 0 {
+			return fmt.Errorf("pod-template-patch file %q is empty", podTemplatePatchPath)
+		}
+		if _, err := yaml.YAMLToJSON(patchBytes); err != nil {
+			return fmt.Errorf("pod-template-patch file %q is not valid YAML/JSON: %w", podTemplatePatchPath, err)
+		}
+		diagParams.PodTemplatePatch = string(patchBytes)
 	}
 	return nil
 }
