@@ -104,7 +104,9 @@ func parsePrivateKey(der []byte) (any, error) {
 // createKeystoreSecret builds a PKCS12 keystore from certPEM/keyPEM and stores it together with
 // a freshly-generated password in a per-job Secret named <podName>-keystore. Any pre-existing
 // Secret with the same name is replaced. The returned name is suitable for mounting into the
-// diagnostic Pod.
+// diagnostic Pod. The password is a PKCS12 format requirement (the format mandates password-based
+// encryption); it adds no confidentiality beyond what Kubernetes Secret access control already
+// provides - anyone who can read the Secret can read both the keystore and its password.
 func createKeystoreSecret(ctx context.Context, k *Kubectl, ns, podName string, certPEM, keyPEM []byte) (string, error) {
 	pwBytes := make([]byte, 16)
 	if _, err := rand.Read(pwBytes); err != nil {
