@@ -392,7 +392,7 @@ func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	if err := ds.kubectl.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](0)}); err != nil && !apierrors.IsNotFound(err) {
 		errs = append(errs, err)
 	}
-	if err := deleteKeystoreSecret(ctx, ds.kubectl, ds.ns, job.keystoreSecret); err != nil && !apierrors.IsNotFound(err) {
+	if err := deleteKeystoreSecret(ctx, ds.kubectl, ds.ns, job.keystoreSecret); err != nil {
 		errs = append(errs, err)
 	}
 	return utilerrors.NewAggregate(errs)

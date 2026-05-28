@@ -133,8 +133,8 @@ func createKeystoreSecret(ctx context.Context, k *Kubectl, ns, podName string, c
 		},
 	}
 
-	if err := k.CoreV1().Secrets(ns).Delete(ctx, secretName, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](0)}); err != nil && !apierrors.IsNotFound(err) {
-		return "", fmt.Errorf("deleting stale keystore secret %s/%s: %w", ns, secretName, err)
+	if err := deleteKeystoreSecret(ctx, k, ns, secretName); err != nil {
+		return "", err
 	}
 	if _, err := k.CoreV1().Secrets(ns).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
 		return "", fmt.Errorf("creating keystore secret %s/%s: %w", ns, secretName, err)
