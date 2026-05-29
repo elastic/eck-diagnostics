@@ -45,6 +45,7 @@ spec:
           /support-diagnostics/diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify \
             {{if (and .ESSecretName .ESSecretKey) }} -u {{ .ESSecretKey }} --passwordText $ES_PW{{end}} \
             {{if .TLS}} -s --noVerify {{end}} \
+            {{if .Port}} --port {{.Port}}{{end}} \
             -o .
           touch ready
           while true; do sleep 1; done;
