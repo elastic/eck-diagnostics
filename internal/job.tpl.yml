@@ -27,17 +27,31 @@ spec:
         readOnlyRootFilesystem: true
         seccompProfile:
           type: RuntimeDefault
-      {{ if (and .ESSecretName .ESSecretKey) }}
+      {{- if or (and .ESSecretName .ESSecretKey) .KeystoreSecretName }}
       env:
+        {{- if (and .ESSecretName .ESSecretKey) }}
         - name: ES_PW
           valueFrom:
             secretKeyRef:
               name: {{ .ESSecretName }}
               key: {{ .ESSecretKey }}
-      {{ end }}
+        {{- end }}
+        {{- if .KeystoreSecretName }}
+        - name: KEYSTORE_PW
+          valueFrom:
+            secretKeyRef:
+              name: {{ .KeystoreSecretName }}
+              key: {{ .KeystorePasswordKey }}
+        {{- end }}
+      {{- end }}
       volumeMounts:
         - name: output
           mountPath: {{ .OutputDir }}
+        {{- if .KeystoreSecretName }}
+        - name: client-cert
+          mountPath: {{ .KeystoreMountPath }}
+          readOnly: true
+        {{- end }}
       command: [sh, -c]
       args:
         - |
@@ -45,6 +59,7 @@ spec:
           /support-diagnostics/diagnostics.sh -h {{.SVCName}} --type {{.Type}} --bypassDiagVerify \
             {{if (and .ESSecretName .ESSecretKey) }} -u {{ .ESSecretKey }} --passwordText $ES_PW{{end}} \
             {{if .TLS}} -s --noVerify {{end}} \
+            {{if .KeystoreSecretName }} --pkiKeystore {{ .KeystoreMountPath }}/{{ .KeystoreFile }} --pkiPassText $KEYSTORE_PW{{end}} \
             {{if .Port}} --port {{.Port}}{{end}} \
             -o .
           touch ready
@@ -64,4 +79,12 @@ spec:
   volumes:
     - name: output
       emptyDir: {}
+    {{- if .KeystoreSecretName }}
+    - name: client-cert
+      secret:
+        secretName: {{ .KeystoreSecretName }}
+        items:
+          - key: {{ .KeystoreFile }}
+            path: {{ .KeystoreFile }}
+    {{- end }}
   restartPolicy: Never
