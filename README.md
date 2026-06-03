@@ -38,6 +38,7 @@ Flags:
   -n, --output-name string                   Name of the output diagnostics file (default "eck-diagnostics-2024-06-25T09-28-37.zip")
   -r, --resources-namespaces strings         Comma-separated list of namespace(s) in which resources are managed
       --image-pull-secrets strings           Comma-separated list of Kubernetes secret names to use as imagePullSecrets for diagnostic Pods
+      --pod-template-patch string            Path to a YAML or JSON file containing a strategic merge patch applied to the diagnostic Pod before it is created. Use this to set labels, annotations, resource requests, securityContext, serviceAccountName, and similar fields required by cluster policies. Object fields are merged; list fields (containers, env, volumes) are merged by the 'name' key. Warning: the patch must not remove the 'stack-diagnostics' container or its command and args, otherwise the tool will exit with an error.
       --run-agent-diagnostics                Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive
       --run-stack-diagnostics                Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster (default true)
       --stack-diagnostics-timeout duration   Maximum time to wait for Elasticsearch and Kibana diagnostics to complete (default 5m0s)
@@ -147,6 +148,44 @@ The following resources are returned unfiltered:
 * PersistentVolume
 * ServiceAccount
 * Secret (metadata only)
+
+## Customizing the diagnostic Pod
+
+In security-hardened Kubernetes clusters, the diagnostic Pod may fail to schedule because cluster policies (Kyverno, OPA Gatekeeper, Pod Security Standards, network policies, resource quotas) conflict with the built-in Pod template. Use `--pod-template-patch` to supply a [strategic merge patch](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#use-a-strategic-merge-patch-to-update-a-deployment) that is applied over the rendered template before the Pod is created.
+
+The patch file must be valid YAML or JSON and Pod-shaped. Lists (containers, env vars, volumes) are merged by the `name` field — the diagnostic container is named **`stack-diagnostics`**.
+
+### Example: meet a Restricted Pod Security Standard policy
+
+```yaml
+# patch.yaml
+metadata:
+  labels:
+    network-policy: allow-es      # satisfy a network policy selector
+spec:
+  serviceAccountName: diagnostics-sa
+  containers:
+  - name: stack-diagnostics
+    securityContext:
+      capabilities:
+        drop: ["ALL"]
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+    resources:
+      requests:
+        memory: 64Mi              # override the default 20Mi to satisfy a resource quota
+        cpu: 200m
+```
+
+```shell
+eck-diagnostics -r my-namespace --pod-template-patch ./patch.yaml
+```
+
+### Notes
+
+- The patch follows the same trust model as `kubectl patch --type=strategic`: any field can be overridden, including load-bearing ones. The only safety check is that the patch must not remove the `stack-diagnostics` container or its `command` and `args` - if either is missing after the merge the tool exits with an error before contacting the API server.
+- An empty `serviceAccountName: ""` in the patch is a no-op (strategic merge treats empty strings as unset).
+- To remove a container or replace a list wholesale, use the `$patch: replace` directive. For the full set of strategic merge patch directives (`$patch`, `$retainKeys`, `$setElementOrder`, `$deleteFromPrimitiveList`) see the [Kubernetes strategic merge patch spec](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/strategic-merge-patch.md).
 
 ### Using custom ECK installation methods
 

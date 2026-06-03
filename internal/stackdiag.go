@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
@@ -130,10 +132,11 @@ type diagJobState struct {
 	diagnosticImage  string
 	jobTimeout       time.Duration
 	imagePullSecrets []string
+	podTemplatePatch []byte
 }
 
 // newDiagJobState creates a new state struct to run diagnostic Pods.
-func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration, imagePullSecrets []string) *diagJobState {
+func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, image string, jobTimeout time.Duration, imagePullSecrets []string, podTemplatePatch []byte) *diagJobState {
 	ctx, cancelFunc := context.WithCancel(ctx) //nolint:gosec
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		k,
@@ -153,8 +156,61 @@ func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, i
 		diagnosticImage:  image,
 		jobTimeout:       jobTimeout,
 		imagePullSecrets: imagePullSecrets,
+		podTemplatePatch: podTemplatePatch,
 	}
 	return state
+}
+
+// renderDiagnosticPod renders the embedded job template using data and, when patchBytes is non-empty,
+// strategically merges patchBytes over the rendered Pod. It returns the resulting *corev1.Pod ready for the API server.
+func renderDiagnosticPod(data map[string]interface{}, patchBytes []byte) (*corev1.Pod, error) {
+	tpl, err := template.New("job").Parse(jobTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer := new(bytes.Buffer)
+	if err := tpl.Execute(buffer, data); err != nil {
+		return nil, err
+	}
+
+	if len(bytes.TrimSpace(patchBytes)) == 0 {
+		var pod corev1.Pod
+		if err := yaml.Unmarshal(buffer.Bytes(), &pod); err != nil {
+			return nil, err
+		}
+		return &pod, nil
+	}
+
+	baseJSON, err := yaml.YAMLToJSON(buffer.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("converting base pod template to JSON: %w", err)
+	}
+
+	patchJSON, err := yaml.YAMLToJSON(patchBytes)
+	if err != nil {
+		return nil, fmt.Errorf("converting pod template patch to JSON: %w", err)
+	}
+
+	mergedJSON, err := strategicpatch.StrategicMergePatch(baseJSON, patchJSON, corev1.Pod{})
+	if err != nil {
+		return nil, fmt.Errorf("applying pod template patch: %w", err)
+	}
+
+	var pod corev1.Pod
+	if err := json.Unmarshal(mergedJSON, &pod); err != nil {
+		return nil, fmt.Errorf("unmarshaling merged pod: %w", err)
+	}
+
+	for _, c := range pod.Spec.Containers {
+		if c.Name == podMainContainerName {
+			if len(c.Command) == 0 || len(c.Args) == 0 {
+				return nil, fmt.Errorf("pod template patch removed the command or args of the %q container: diagnostic collection would fail", podMainContainerName)
+			}
+			return &pod, nil
+		}
+	}
+	return nil, fmt.Errorf("pod template patch removed the %q container: diagnostic collection would fail", podMainContainerName)
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
@@ -162,14 +218,9 @@ func newDiagJobState(ctx context.Context, k *Kubectl, ns string, verbose bool, i
 // Pod will mount and present during the TLS handshake (used when the target cluster requires client cert auth).
 func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName, keystoreSecretName string, tls bool) error {
 	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
-	tpl, err := template.New("job").Parse(jobTemplate)
-	if err != nil {
-		return err
-	}
 
 	diagnosticType, svcSuffix := diagnosticTypeForApplication(typ)
 
-	buffer := new(bytes.Buffer)
 	data := map[string]interface{}{
 		"PodName":             podName,
 		"DiagnosticImage":     ds.diagnosticImage,
@@ -187,13 +238,8 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName
 		"KeystorePasswordKey": keystorePasswordKey,
 		"KeystoreMountPath":   keystoreMountPath,
 	}
-	err = tpl.Execute(buffer, data)
-	if err != nil {
-		return err
-	}
 
-	var pod corev1.Pod
-	err = yaml.Unmarshal(buffer.Bytes(), &pod)
+	pod, err := renderDiagnosticPod(data, ds.podTemplatePatch)
 	if err != nil {
 		return err
 	}
@@ -203,7 +249,7 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName
 		return err
 	}
 
-	_, err = ds.kubectl.CoreV1().Pods(ds.ns).Create(context.Background(), &pod, metav1.CreateOptions{})
+	_, err = ds.kubectl.CoreV1().Pods(ds.ns).Create(context.Background(), pod, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -421,8 +467,9 @@ func runStackDiagnostics(
 	filters internalfilters.Filters,
 	eckVersion *version.Version,
 	imagePullSecrets []string,
+	podTemplatePatch []byte,
 ) {
-	state := newDiagJobState(ctx, k, ns, verbose, image, jobTimeout, imagePullSecrets)
+	state := newDiagJobState(ctx, k, ns, verbose, image, jobTimeout, imagePullSecrets, podTemplatePatch)
 
 	for _, typ := range supportedStackDiagTypesFor(eckVersion) {
 		if err := scheduleJobs(k, ns, zipFile.AddError, state, typ, filters); err != nil {
