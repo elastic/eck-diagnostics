@@ -15,7 +15,7 @@ require (
 	k8s.io/kubectl v0.36.1
 	k8s.io/streaming v0.36.1
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
-	software.sslmate.com/src/go-pkcs12 v0.7.1
+	software.sslmate.com/src/go-pkcs12 v0.7.2
 )
 
 require (
