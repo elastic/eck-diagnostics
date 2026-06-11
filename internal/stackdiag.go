@@ -168,6 +168,8 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName
 	}
 
 	diagnosticType, svcSuffix := diagnosticTypeForApplication(typ)
+	svcName := fmt.Sprintf("%s-%s", resourceName, svcSuffix)
+	svcPort := ds.detectServicePort(svcName)
 
 	buffer := new(bytes.Buffer)
 	data := map[string]interface{}{
@@ -179,6 +181,7 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName
 		"SVCName":             fmt.Sprintf("%s-%s", resourceName, svcSuffix),
 		"Type":                diagnosticType,
 		"TLS":                 tls,
+		"Port":                svcPort,
 		"OutputDir":           podOutputDir,
 		"MainContainerName":   podMainContainerName,
 		"ImagePullSecrets":    ds.imagePullSecrets,
@@ -249,6 +252,30 @@ func diagnosticTypeForApplication(typ string) (string, string) {
 		return "logstash-api", "ls-api"
 	}
 	panic("programming error: unknown type")
+}
+
+// detectServicePort looks up the Kubernetes service and returns the port it exposes, preferring a port named "http"
+// or "https", falling back to the first port. Returns 0 if the service cannot be found or has no ports, in which case
+// the diagnostic tool will use its own default.
+func (ds *diagJobState) detectServicePort(svcName string) int32 {
+	svcNsn := types.NamespacedName{Namespace: ds.ns, Name: svcName}
+	svc, err := ds.kubectl.CoreV1().Services(ds.ns).Get(context.Background(), svcName, metav1.GetOptions{})
+	if err != nil {
+		logger.Printf("Warning: could not detect port for service %q, using diagnostic tool default: %v", svcNsn, err)
+		return 0
+	}
+	for _, p := range svc.Spec.Ports {
+		if p.Name == "http" || p.Name == "https" {
+			return p.Port
+		}
+	}
+	if len(svc.Spec.Ports) > 0 {
+		port := svc.Spec.Ports[0].Port
+		logger.Printf("Warning: could not find https or http ports in service %q, using %d port from first entry", svcNsn, port)
+		return port
+	}
+	logger.Printf("Warning: service %q has no port definitions, using diagnostic tool default", svcNsn)
+	return 0
 }
 
 // extractFromRemote runs the equivalent of "kubectl cp" to extract the stack diagnostics from a remote Pod.
