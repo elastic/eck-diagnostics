@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -124,7 +125,7 @@ func validation(_ *cobra.Command, _ []string) error {
 		if err != nil {
 			return fmt.Errorf("reading pod-template-patch: %w", err)
 		}
-		if len(strings.TrimSpace(string(patchBytes))) == 0 {
+		if len(bytes.TrimSpace(patchBytes)) == 0 {
 			return fmt.Errorf("pod-template-patch file %q is empty", podTemplatePatchPath)
 		}
 		if _, err := yaml.YAMLToJSON(patchBytes); err != nil {
