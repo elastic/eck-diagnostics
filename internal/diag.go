@@ -48,6 +48,7 @@ type Params struct {
 	AgentDiagnosticsTimeout     time.Duration
 	AgentDiagnosticsConcurrency int
 	ImagePullSecrets            []string
+	PodTemplatePatch            string
 	KeepSecretData              bool
 	Filters                     filters.Filters
 	LogFilters                  filters.Filters
@@ -258,6 +259,7 @@ LOOP:
 				namespaceFilters,
 				maxOperatorVersion,
 				params.ImagePullSecrets,
+				[]byte(params.PodTemplatePatch),
 			)
 		}
 
