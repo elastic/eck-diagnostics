@@ -60,6 +60,7 @@ spec:
             {{if (and .ESSecretName .ESSecretKey) }} -u {{ .ESSecretKey }} --passwordText $ES_PW{{end}} \
             {{if .TLS}} -s --noVerify {{end}} \
             {{if .KeystoreSecretName }} --pkiKeystore {{ .KeystoreMountPath }}/{{ .KeystoreFile }} --pkiPassText $KEYSTORE_PW{{end}} \
+            {{if .Port}} --port {{.Port}}{{end}} \
             -o .
           touch ready
           while true; do sleep 1; done;

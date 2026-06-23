@@ -8,6 +8,7 @@ import (
 	"bytes"
 	_ "embed"
 	"reflect"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -15,6 +16,67 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/version"
 )
+
+func Test_jobTemplate_port(t *testing.T) {
+	tests := []struct {
+		name        string
+		port        int32
+		wantContain string
+		wantAbsent  string
+	}{
+		{
+			name:        "port flag injected when port is non-zero",
+			port:        443,
+			wantContain: "--port 443",
+		},
+		{
+			name:       "port flag absent when port is zero",
+			port:       0,
+			wantAbsent: "--port ",
+		},
+	}
+
+	baseData := map[string]interface{}{
+		"PodName":           "test-pod",
+		"DiagnosticImage":   "docker.elastic.co/eck-dev/support-diagnostics:latest",
+		"Namespace":         "default",
+		"ESSecretName":      "",
+		"ESSecretKey":       "",
+		"SVCName":           "my-kibana-kb-http",
+		"Type":              "kibana-api",
+		"TLS":               false,
+		"OutputDir":         "/diagnostic-output",
+		"MainContainerName": "stack-diagnostics",
+		"ImagePullSecrets":  nil,
+	}
+
+	tpl, err := template.New("job").Parse(jobTemplate)
+	if err != nil {
+		t.Fatalf("parsing template: %v", err)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make(map[string]interface{}, len(baseData)+1)
+			for k, v := range baseData {
+				data[k] = v
+			}
+			data["Port"] = tt.port
+
+			buf := new(bytes.Buffer)
+			if err := tpl.Execute(buf, data); err != nil {
+				t.Fatalf("executing template: %v", err)
+			}
+			rendered := buf.String()
+			if tt.wantContain != "" && !strings.Contains(rendered, tt.wantContain) {
+				t.Errorf("expected rendered template to contain %q\nrendered:\n%s", tt.wantContain, rendered)
+			}
+			if tt.wantAbsent != "" && strings.Contains(rendered, tt.wantAbsent) {
+				t.Errorf("expected rendered template NOT to contain %q\nrendered:\n%s", tt.wantAbsent, rendered)
+			}
+		})
+	}
+}
 
 func Test_jobTemplate_imagePullSecrets(t *testing.T) {
 	tests := []struct {
