@@ -87,9 +87,12 @@ func supportedStackDiagTypesFor(eckVersion *version.Version) []string {
 type diagJob struct {
 	sync.RWMutex
 	extraction.RemoteSource
-	d     bool
-	timer *time.Timer
-	done  chan struct{}
+	// keystoreSecret is the name of a per-job Secret holding a PKCS12 client keystore. Empty when
+	// the target cluster does not require client certificate authentication.
+	keystoreSecret string
+	d              bool
+	timer          *time.Timer
+	done           chan struct{}
 }
 
 func (d *diagJob) StartTimer(dur time.Duration) <-chan time.Time {
@@ -211,23 +214,32 @@ func renderDiagnosticPod(data map[string]interface{}, patchBytes []byte) (*corev
 }
 
 // scheduleJob creates a Pod to extract diagnostic data from an Elasticsearch cluster or Kibana called resourceName.
-func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName string, tls bool) error {
+// keystoreSecretName, if non-empty, identifies a Secret containing a PKCS12 client keystore that the diagnostic
+// Pod will mount and present during the TLS handshake (used when the target cluster requires client cert auth).
+func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName, keystoreSecretName string, tls bool) error {
 	podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
 
 	diagnosticType, svcSuffix := diagnosticTypeForApplication(typ)
+	svcName := fmt.Sprintf("%s-%s", resourceName, svcSuffix)
+	svcPort := ds.detectServicePort(svcName)
 
 	data := map[string]interface{}{
-		"PodName":           podName,
-		"DiagnosticImage":   ds.diagnosticImage,
-		"Namespace":         ds.ns,
-		"ESSecretName":      esSecretName,
-		"ESSecretKey":       esSecretKey,
-		"SVCName":           fmt.Sprintf("%s-%s", resourceName, svcSuffix),
-		"Type":              diagnosticType,
-		"TLS":               tls,
-		"OutputDir":         podOutputDir,
-		"MainContainerName": podMainContainerName,
-		"ImagePullSecrets":  ds.imagePullSecrets,
+		"PodName":             podName,
+		"DiagnosticImage":     ds.diagnosticImage,
+		"Namespace":           ds.ns,
+		"ESSecretName":        esSecretName,
+		"ESSecretKey":         esSecretKey,
+		"SVCName":             fmt.Sprintf("%s-%s", resourceName, svcSuffix),
+		"Type":                diagnosticType,
+		"TLS":                 tls,
+		"Port":                svcPort,
+		"OutputDir":           podOutputDir,
+		"MainContainerName":   podMainContainerName,
+		"ImagePullSecrets":    ds.imagePullSecrets,
+		"KeystoreSecretName":  keystoreSecretName,
+		"KeystoreFile":        keystoreFile,
+		"KeystorePasswordKey": keystorePasswordKey,
+		"KeystoreMountPath":   keystoreMountPath,
 	}
 
 	pod, err := renderDiagnosticPod(data, ds.podTemplatePatch)
@@ -253,7 +265,8 @@ func (ds *diagJobState) scheduleJob(typ, esSecretName, esSecretKey, resourceName
 			ResourceName: resourceName,
 			PodOutputDir: podOutputDir,
 		},
-		done: make(chan struct{}, 1),
+		keystoreSecret: keystoreSecretName,
+		done:           make(chan struct{}, 1),
 	}
 	// start a dedicated timer for each job and terminate the job when the timer expires.
 	go func(j *diagJob) {
@@ -285,6 +298,30 @@ func diagnosticTypeForApplication(typ string) (string, string) {
 		return "logstash-api", "ls-api"
 	}
 	panic("programming error: unknown type")
+}
+
+// detectServicePort looks up the Kubernetes service and returns the port it exposes, preferring a port named "http"
+// or "https", falling back to the first port. Returns 0 if the service cannot be found or has no ports, in which case
+// the diagnostic tool will use its own default.
+func (ds *diagJobState) detectServicePort(svcName string) int32 {
+	svcNsn := types.NamespacedName{Namespace: ds.ns, Name: svcName}
+	svc, err := ds.kubectl.CoreV1().Services(ds.ns).Get(context.Background(), svcName, metav1.GetOptions{})
+	if err != nil {
+		logger.Printf("Warning: could not detect port for service %q, using diagnostic tool default: %v", svcNsn, err)
+		return 0
+	}
+	for _, p := range svc.Spec.Ports {
+		if p.Name == "http" || p.Name == "https" {
+			return p.Port
+		}
+	}
+	if len(svc.Spec.Ports) > 0 {
+		port := svc.Spec.Ports[0].Port
+		logger.Printf("Warning: could not find https or http ports in service %q, using %d port from first entry", svcNsn, port)
+		return port
+	}
+	logger.Printf("Warning: service %q has no port definitions, using diagnostic tool default", svcNsn)
+	return 0
 }
 
 // extractFromRemote runs the equivalent of "kubectl cp" to extract the stack diagnostics from a remote Pod.
@@ -421,10 +458,17 @@ func (ds *diagJobState) completeJob(job *diagJob) error {
 	return ds.terminateJob(ds.context, job)
 }
 
-// terminateJob marks job as done and deletes diagnostic Pod.
+// terminateJob marks job as done and deletes the diagnostic Pod plus any per-job keystore Secret.
 func (ds *diagJobState) terminateJob(ctx context.Context, job *diagJob) error {
 	job.MarkDone()
-	return ds.kubectl.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](0)})
+	var errs []error
+	if err := ds.kubectl.CoreV1().Pods(ds.ns).Delete(ctx, job.PodName, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](0)}); err != nil && !apierrors.IsNotFound(err) {
+		errs = append(errs, err)
+	}
+	if err := deleteKeystoreSecret(ctx, ds.kubectl, ds.ns, job.keystoreSecret); err != nil {
+		errs = append(errs, err)
+	}
+	return utilerrors.NewAggregate(errs)
 }
 
 // detectImageErrors tries to detect Image pull errors on the diagnostic container. Callers should then terminate the job
@@ -497,9 +541,43 @@ func scheduleJobs(k *Kubectl, ns string, recordErr func(error), state *diagJobSt
 			return nil
 		}
 
-		recordErr(state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, isTLS))
+		// For Elasticsearch jobs, detect whether the target cluster requires client certificate
+		// authentication and, if so, materialise a per-job PKCS12 keystore Secret that the
+		// diagnostic Pod will mount. This is what allows the bundled support-diagnostics tool
+		// to complete the TLS handshake against an mTLS-enabled cluster.
+		var keystoreSecretName string
+		if typ == elasticsearchJob {
+			podName := fmt.Sprintf("%s-%s-diag", resourceName, typ)
+			name, err := setupClientKeystore(k, ns, esName, podName)
+			if err != nil {
+				recordErr(fmt.Errorf("while preparing client certificate for %s: %w", esName, err))
+				return nil
+			}
+			keystoreSecretName = name
+		}
+
+		if err := state.scheduleJob(typ, esSecretName, esSecretKey, resourceName, keystoreSecretName, isTLS); err != nil {
+			// scheduleJob failed before the job was registered, so terminateJob will never run for
+			// this resource. Clean up the keystore Secret here to avoid leaving key material behind.
+			recordErr(deleteKeystoreSecret(context.Background(), state.kubectl, ns, keystoreSecretName))
+			recordErr(err)
+		}
 		return nil
 	})
+}
+
+// setupClientKeystore materialises a per-job PKCS12 keystore Secret for the given Elasticsearch
+// resource if the operator client certificate secret exists. Returns the empty string when the
+// cluster does not require client certificate authentication.
+func setupClientKeystore(k *Kubectl, ns, esName, podName string) (string, error) {
+	certPEM, keyPEM, found, err := loadOperatorClientCert(k, ns, esName)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", nil
+	}
+	return createKeystoreSecret(context.Background(), k, ns, podName, certPEM, keyPEM)
 }
 
 func extractEsInfo(typ string, ns string, resourceInfo *resource.Info) (bool, string, error) {
