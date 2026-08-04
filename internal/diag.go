@@ -134,6 +134,8 @@ func Run(params Params) error {
 	maxOperatorVersion := maxVersion(operatorVersions)
 	logVersion(maxOperatorVersion)
 
+	k8sVersion := detectK8sVersion(kubectl)
+
 	allNamespaces := sets.New(params.ResourcesNamespaces...)
 	allNamespaces.Insert(params.OperatorNamespaces...)
 
@@ -172,7 +174,7 @@ LOOP:
 		}
 
 		logger.Printf("Extracting Kubernetes diagnostics from %s\n", ns)
-		zipFile.Add(getResources(kubectl.GetByLabel, ns, namespaceFilters, []string{
+		nsResources := []string{
 			"statefulsets",
 			"replicasets",
 			"deployments",
@@ -180,10 +182,14 @@ LOOP:
 			"pods",
 			"persistentvolumeclaims",
 			"services",
-			"endpoints",
+			"endpointslices",
 			"configmaps",
 			"controllerrevisions",
-		}))
+		}
+		if k8sVersion.LessThan(k8sEndpointsDeprecatedVersion) {
+			nsResources = append(nsResources, "endpoints")
+		}
+		zipFile.Add(getResources(kubectl.GetByLabel, ns, namespaceFilters, nsResources))
 
 		zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
 			"kibana",
