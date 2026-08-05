@@ -392,37 +392,70 @@ func Test_parseManagedNamespacesFromConfigMap(t *testing.T) {
 	}
 }
 
-func Test_annotationKeyFromFieldPath(t *testing.T) {
-	tests := []struct {
-		fieldPath string
-		want      string
-	}{
-		{fieldPath: "metadata.annotations['olm.targetNamespaces']", want: "olm.targetNamespaces"},
-		{fieldPath: "metadata.annotations['olm.operatorNamespace']", want: "olm.operatorNamespace"},
-		{fieldPath: "metadata.name", want: ""},
-		{fieldPath: "metadata.namespace", want: ""},
-		{fieldPath: "", want: ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.fieldPath, func(t *testing.T) {
-			if got := annotationKeyFromFieldPath(tt.fieldPath); got != tt.want {
-				t.Errorf("annotationKeyFromFieldPath(%q) = %q, want %q", tt.fieldPath, got, tt.want)
-			}
-		})
-	}
-}
-
 func Test_resolveEnvValueFromFieldRef(t *testing.T) {
 	podMeta := metav1.ObjectMeta{
-		Annotations: map[string]string{"olm.targetNamespaces": "ns1,ns2"},
-	}
-	src := &corev1.EnvVarSource{
-		FieldRef: &corev1.ObjectFieldSelector{
-			FieldPath: "metadata.annotations['olm.targetNamespaces']",
+		Annotations: map[string]string{
+			"olm.targetNamespaces":  "ns1,ns2",
+			"olm.operatorNamespace": "elastic-system",
 		},
 	}
-	if got := resolveEnvValueFromFieldRef(podMeta, src); got != "ns1,ns2" {
-		t.Errorf("resolveEnvValueFromFieldRef() = %q, want %q", got, "ns1,ns2")
+	tests := []struct {
+		name string
+		src  *corev1.EnvVarSource
+		want string
+	}{
+		{
+			name: "annotation key resolved",
+			src: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.annotations['olm.targetNamespaces']",
+			}},
+			want: "ns1,ns2",
+		},
+		{
+			name: "second annotation key resolved",
+			src: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.annotations['olm.operatorNamespace']",
+			}},
+			want: "elastic-system",
+		},
+		{
+			name: "non-annotation fieldPath returns empty",
+			src: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			}},
+			want: "",
+		},
+		{
+			name: "metadata.namespace returns empty",
+			src: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.namespace",
+			}},
+			want: "",
+		},
+		{
+			name: "missing annotation key returns empty",
+			src: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.annotations['olm.nonExistent']",
+			}},
+			want: "",
+		},
+		{
+			name: "nil src returns empty",
+			src:  nil,
+			want: "",
+		},
+		{
+			name: "nil FieldRef returns empty",
+			src:  &corev1.EnvVarSource{FieldRef: nil},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveEnvValueFromFieldRef(podMeta, tt.src); got != tt.want {
+				t.Errorf("resolveEnvValueFromFieldRef() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/kubectl/pkg/util/fieldpath"
 )
 
 // ManagedNamespaces describes which namespaces an ECK operator instance manages.
@@ -257,25 +258,11 @@ func resolveEnvValueFromFieldRef(podMeta metav1.ObjectMeta, src *corev1.EnvVarSo
 	if src == nil || src.FieldRef == nil {
 		return ""
 	}
-	annotationKey := annotationKeyFromFieldPath(src.FieldRef.FieldPath)
-	if annotationKey == "" {
+	base, key, ok := fieldpath.SplitMaybeSubscriptedPath(src.FieldRef.FieldPath)
+	if !ok || base != "metadata.annotations" {
 		return ""
 	}
-	return podMeta.Annotations[annotationKey]
-}
-
-// annotationKeyFromFieldPath extracts the annotation key from a fieldPath of the form
-// metadata.annotations['<key>'], returning "" for any other form.
-func annotationKeyFromFieldPath(fieldPath string) string {
-	trimmed, ok := strings.CutPrefix(fieldPath, "metadata.annotations['")
-	if !ok {
-		return ""
-	}
-	key, ok := strings.CutSuffix(trimmed, "']")
-	if !ok {
-		return ""
-	}
-	return key
+	return podMeta.Annotations[key]
 }
 
 // parseManagedNamespacesFromConfigMap parses the operator config from the given ConfigMap data key.
