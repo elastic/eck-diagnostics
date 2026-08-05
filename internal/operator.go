@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/ghodss/yaml"
@@ -342,7 +343,9 @@ func warnMissingNamespaces(c *kubernetes.Clientset, infos []OperatorInfo, collec
 		mn := info.ManagedNamespaces
 		switch {
 		case mn.All:
-			logger.Printf("WARNING: Operator in namespace %q manages all namespaces; the diagnostic only collects resources from %v. Specify additional workload namespaces via --resources-namespaces to broaden coverage.", info.Namespace, collectedNamespacesSet.UnsortedList())
+			collected := collectedNamespacesSet.UnsortedList()
+			sort.Strings(collected)
+			logger.Printf("INFO: Operator in namespace %q manages all namespaces; this diagnostic collects resources from %v. Use --resources-namespaces to include additional namespaces if needed.", info.Namespace, collected)
 		case mn.Selector != nil:
 			managed, err := namespacesMatchingSelector(c, mn.Selector)
 			if err != nil {
