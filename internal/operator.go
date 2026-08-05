@@ -145,7 +145,7 @@ func detectManagedNamespaces(c kubernetes.Interface, namespace string, podTempla
 		}
 
 		if vals := extractAllFlagValues(container.Args, "--namespaces"); len(vals) > 0 {
-			var namespaces []string
+			namespaces := make([]string, 0, len(vals))
 			for _, v := range vals {
 				namespaces = append(namespaces, splitCSV(v)...)
 			}
