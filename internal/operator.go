@@ -52,6 +52,8 @@ func detectOperatorInfo(c *kubernetes.Clientset, namespace, userSpecifiedVersion
 		if v, err := version.ParseSemantic(userSpecifiedVersion); err == nil {
 			info.parsedVersion = v
 			info.Version = v.String()
+		} else {
+			logger.Printf("WARNING: could not parse --eck-version %q: %v", userSpecifiedVersion, err)
 		}
 	}
 
