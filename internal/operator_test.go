@@ -267,6 +267,14 @@ func Test_findConfigMapForPath(t *testing.T) {
 			wantDataKey: "",
 		},
 		{
+			name:        "mount at /conf does not match configPath /config/eck.yaml",
+			podSpec:     corev1.PodSpec{Volumes: baseVolumes},
+			container:   baseContainer,
+			configPath:  "/config/eck.yaml",
+			wantCMName:  "",
+			wantDataKey: "",
+		},
+		{
 			name: "subPath with items remapping resolves to mapped key",
 			podSpec: corev1.PodSpec{
 				Volumes: []corev1.Volume{{

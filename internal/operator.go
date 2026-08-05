@@ -213,7 +213,7 @@ func findConfigMapForPath(podSpec corev1.PodSpec, container corev1.Container, co
 			relPath = vm.SubPath
 			break
 		}
-		if vm.SubPath == "" && strings.HasPrefix(configPath, vm.MountPath) {
+		if vm.SubPath == "" && (configPath == vm.MountPath || strings.HasPrefix(configPath, strings.TrimSuffix(vm.MountPath, "/")+"/")) {
 			mountName = vm.Name
 			mountPath = vm.MountPath
 			break
