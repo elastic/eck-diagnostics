@@ -39,7 +39,7 @@ type OperatorInfo struct {
 }
 
 // detectOperatorInfo gathers metadata about the ECK operator running in the given namespace.
-func detectOperatorInfo(c *kubernetes.Clientset, namespace, userSpecifiedVersion string) OperatorInfo {
+func detectOperatorInfo(c kubernetes.Interface, namespace, userSpecifiedVersion string) OperatorInfo {
 	info := OperatorInfo{
 		Namespace:         namespace,
 		Version:           "unknown",
@@ -100,7 +100,7 @@ func podTemplateFromStatefulSet(sset *appsv1.StatefulSet, info *OperatorInfo, us
 	return sset.Spec.Template
 }
 
-func podTemplateFromDeployment(c *kubernetes.Clientset, namespace string, info *OperatorInfo, userSpecifiedVersion string) (corev1.PodTemplateSpec, error) {
+func podTemplateFromDeployment(c kubernetes.Interface, namespace string, info *OperatorInfo, userSpecifiedVersion string) (corev1.PodTemplateSpec, error) {
 	deployment, err := c.AppsV1().Deployments(namespace).Get(context.Background(), "elastic-operator", metav1.GetOptions{})
 	if err != nil {
 		return corev1.PodTemplateSpec{}, fmt.Errorf("operator statefulset not found, checking for OLM deployment but failed: %w", err)
@@ -338,7 +338,7 @@ func splitCSV(s string) []string {
 }
 
 // warnMissingNamespaces logs a warning for each managed namespace not covered by collectedNamespaces.
-func warnMissingNamespaces(c *kubernetes.Clientset, infos []OperatorInfo, collectedNamespaces []string) {
+func warnMissingNamespaces(c kubernetes.Interface, infos []OperatorInfo, collectedNamespaces []string) {
 	collectedNamespacesSet := sets.New(collectedNamespaces...)
 
 	for _, info := range infos {
@@ -366,7 +366,7 @@ func warnMissingNamespaces(c *kubernetes.Clientset, infos []OperatorInfo, collec
 }
 
 // namespacesMatchingSelector lists cluster namespaces whose labels match the given selector.
-func namespacesMatchingSelector(c *kubernetes.Clientset, selector *metav1.LabelSelector) ([]string, error) {
+func namespacesMatchingSelector(c kubernetes.Interface, selector *metav1.LabelSelector) ([]string, error) {
 	sel, err := metav1.LabelSelectorAsSelector(selector)
 	if err != nil {
 		return nil, err

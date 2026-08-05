@@ -29,7 +29,7 @@ func logVersion(v *version.Version) {
 	logger.Printf("ECK version is %s\n", s)
 }
 
-func findOperatorStatefulSet(c *kubernetes.Clientset, namespace string) (*appsv1.StatefulSet, error) {
+func findOperatorStatefulSet(c kubernetes.Interface, namespace string) (*appsv1.StatefulSet, error) {
 	// we use the control-plane label since ECK version 1.0
 	ssets, err := c.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "control-plane=elastic-operator"})
 	if err != nil {

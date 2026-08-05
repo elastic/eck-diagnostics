@@ -8,8 +8,11 @@ import (
 	"reflect"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func Test_detectInstallMethod(t *testing.T) {
@@ -533,6 +536,216 @@ func Test_detectManagedNamespaces(t *testing.T) {
 			got := detectManagedNamespaces(nil, "elastic-system", tt.podTemplate)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("detectManagedNamespaces() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_detectOperatorInfo(t *testing.T) {
+	const ns = "elastic-system"
+
+	tests := []struct {
+		name                 string
+		objects              []appsv1.StatefulSet
+		deployments          []appsv1.Deployment
+		userSpecifiedVersion string
+		wantVersion          string
+		wantInstallMethod    string
+		wantManagedNS        ManagedNamespaces
+	}{
+		{
+			name: "StatefulSet path: version from label, yaml install, all namespaces",
+			objects: []appsv1.StatefulSet{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels: map[string]string{
+						"control-plane":             "elastic-operator",
+						"app.kubernetes.io/version": "2.14.0",
+					},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "manager", Image: "docker.elastic.co/eck/eck-operator:2.14.0"}},
+						},
+					},
+				},
+			}},
+			wantVersion:       "2.14.0",
+			wantInstallMethod: "yaml",
+			wantManagedNS:     ManagedNamespaces{All: true},
+		},
+		{
+			name: "StatefulSet path: user-specified version overrides label",
+			objects: []appsv1.StatefulSet{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels: map[string]string{
+						"control-plane":             "elastic-operator",
+						"app.kubernetes.io/version": "2.14.0",
+					},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "manager"}},
+						},
+					},
+				},
+			}},
+			userSpecifiedVersion: "2.13.0",
+			wantVersion:          "2.13.0",
+			wantInstallMethod:    "yaml",
+			wantManagedNS:        ManagedNamespaces{All: true},
+		},
+		{
+			name: "StatefulSet path: helm install detected from labels",
+			objects: []appsv1.StatefulSet{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels: map[string]string{
+						"helm.sh/chart":                "eck-operator-2.14.0",
+						"app.kubernetes.io/managed-by": "Helm",
+						"app.kubernetes.io/version":    "2.14.0",
+					},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "manager"}},
+						},
+					},
+				},
+			}},
+			wantVersion:       "2.14.0",
+			wantInstallMethod: "helm",
+			wantManagedNS:     ManagedNamespaces{All: true},
+		},
+		{
+			name: "StatefulSet path: managed namespaces from --namespaces flag",
+			objects: []appsv1.StatefulSet{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels: map[string]string{
+						"control-plane":             "elastic-operator",
+						"app.kubernetes.io/version": "2.14.0",
+					},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name:  "manager",
+								Image: "docker.elastic.co/eck/eck-operator:2.14.0",
+								Args:  []string{"--namespaces=ns1,ns2"},
+							}},
+						},
+					},
+				},
+			}},
+			wantVersion:       "2.14.0",
+			wantInstallMethod: "yaml",
+			wantManagedNS:     ManagedNamespaces{All: false, Static: []string{"ns1", "ns2"}},
+		},
+		{
+			name: "OLM Deployment path: version from OLM label",
+			deployments: []appsv1.Deployment{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels: map[string]string{
+						"olm.owner": "elastic-operator.2.14.0",
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "manager"}},
+						},
+					},
+				},
+			}},
+			wantVersion:       "2.14.0",
+			wantInstallMethod: "olm",
+			wantManagedNS:     ManagedNamespaces{All: true},
+		},
+		{
+			name:              "no operator found returns defaults",
+			wantVersion:       "unknown",
+			wantInstallMethod: "unknown",
+			wantManagedNS:     ManagedNamespaces{All: true},
+		},
+		{
+			name: "StatefulSet path: version falls back to container image tag",
+			objects: []appsv1.StatefulSet{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels:    map[string]string{"control-plane": "elastic-operator"},
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name:  "manager",
+								Image: "docker.elastic.co/eck/eck-operator:2.13.0",
+							}},
+						},
+					},
+				},
+			}},
+			wantVersion:       "2.13.0",
+			wantInstallMethod: "yaml",
+			wantManagedNS:     ManagedNamespaces{All: true},
+		},
+		{
+			name: "OLM Deployment path: version falls back to container image tag",
+			deployments: []appsv1.Deployment{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "elastic-operator",
+					Namespace: ns,
+					Labels:    map[string]string{"olm.owner": "elastic-operator"},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name:  "manager",
+								Image: "docker.elastic.co/eck/eck-operator:2.13.0",
+							}},
+						},
+					},
+				},
+			}},
+			wantVersion:       "2.13.0",
+			wantInstallMethod: "olm",
+			wantManagedNS:     ManagedNamespaces{All: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var objs []runtime.Object
+			for i := range tt.objects {
+				objs = append(objs, &tt.objects[i])
+			}
+			for i := range tt.deployments {
+				objs = append(objs, &tt.deployments[i])
+			}
+			c := fake.NewSimpleClientset(objs...)
+			got := detectOperatorInfo(c, ns, tt.userSpecifiedVersion)
+			if got.Version != tt.wantVersion {
+				t.Errorf("Version = %q, want %q", got.Version, tt.wantVersion)
+			}
+			if got.InstallMethod != tt.wantInstallMethod {
+				t.Errorf("InstallMethod = %q, want %q", got.InstallMethod, tt.wantInstallMethod)
+			}
+			if !reflect.DeepEqual(got.ManagedNamespaces, tt.wantManagedNS) {
+				t.Errorf("ManagedNamespaces = %+v, want %+v", got.ManagedNamespaces, tt.wantManagedNS)
 			}
 		})
 	}
