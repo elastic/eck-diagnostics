@@ -103,6 +103,48 @@ func Test_extractFlagValue(t *testing.T) {
 	}
 }
 
+func Test_extractAllFlagValues(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		flag string
+		want []string
+	}{
+		{
+			name: "single occurrence",
+			args: []string{"--namespaces=ns1"},
+			flag: "--namespaces",
+			want: []string{"ns1"},
+		},
+		{
+			name: "repeated flag",
+			args: []string{"--namespaces=ns1", "--namespaces=ns2"},
+			flag: "--namespaces",
+			want: []string{"ns1", "ns2"},
+		},
+		{
+			name: "space-separated form repeated",
+			args: []string{"--namespaces", "ns1", "--namespaces", "ns2"},
+			flag: "--namespaces",
+			want: []string{"ns1", "ns2"},
+		},
+		{
+			name: "flag not present",
+			args: []string{"--other=value"},
+			flag: "--namespaces",
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractAllFlagValues(tt.args, tt.flag)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("extractAllFlagValues() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func Test_splitCSV(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -466,6 +508,19 @@ func Test_detectManagedNamespaces(t *testing.T) {
 		podTemplate corev1.PodTemplateSpec
 		want        ManagedNamespaces
 	}{
+		{
+			name: "repeated --namespaces flags are merged",
+			podTemplate: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "manager",
+						Image: operatorImage,
+						Args:  []string{"--namespaces=ns1", "--namespaces=ns2,ns3"},
+					}},
+				},
+			},
+			want: ManagedNamespaces{All: false, Static: []string{"ns1", "ns2", "ns3"}},
+		},
 		{
 			name: "arg wins over env var",
 			podTemplate: corev1.PodTemplateSpec{

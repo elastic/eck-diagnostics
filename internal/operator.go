@@ -144,8 +144,12 @@ func detectManagedNamespaces(c kubernetes.Interface, namespace string, podTempla
 			continue
 		}
 
-		if val := extractFlagValue(container.Args, "--namespaces"); val != "" {
-			return ManagedNamespaces{All: false, Static: splitCSV(val)}
+		if vals := extractAllFlagValues(container.Args, "--namespaces"); len(vals) > 0 {
+			var namespaces []string
+			for _, v := range vals {
+				namespaces = append(namespaces, splitCSV(v)...)
+			}
+			return ManagedNamespaces{All: false, Static: namespaces}
 		}
 
 		for _, env := range container.Env {
@@ -191,7 +195,7 @@ func detectManagedNamespaces(c kubernetes.Interface, namespace string, podTempla
 	return ManagedNamespaces{All: true}
 }
 
-// extractFlagValue finds the value of --flag value or --flag=value in a list of args.
+// extractFlagValue finds the value of --flag value or --flag=value in a list of args, returning the first match.
 func extractFlagValue(args []string, flag string) string {
 	for i, arg := range args {
 		if v, ok := strings.CutPrefix(arg, flag+"="); ok {
@@ -202,6 +206,22 @@ func extractFlagValue(args []string, flag string) string {
 		}
 	}
 	return ""
+}
+
+// extractAllFlagValues collects every occurrence of --flag value or --flag=value in args.
+// Use this for flags that may appear multiple times (e.g. --namespaces=a --namespaces=b).
+func extractAllFlagValues(args []string, flag string) []string {
+	var vals []string
+	for i, arg := range args {
+		if v, ok := strings.CutPrefix(arg, flag+"="); ok {
+			vals = append(vals, v)
+			continue
+		}
+		if arg == flag && i+1 < len(args) {
+			vals = append(vals, args[i+1])
+		}
+	}
+	return vals
 }
 
 // findConfigMapForPath traces a mounted config file path back to the ConfigMap name and data key
