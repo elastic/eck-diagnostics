@@ -7,7 +7,6 @@ package internal
 import (
 	"context"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -30,39 +29,7 @@ func logVersion(v *version.Version) {
 	logger.Printf("ECK version is %s\n", s)
 }
 
-// detectECKVersion tries to detect the ECK version by inspecting the ECK operator stateful set or deployment.
-func detectECKVersion(c *kubernetes.Clientset, namespace, userSpecifiedVersion string) *version.Version {
-	if userSpecifiedVersion != "" {
-		parsed, err := version.ParseSemantic(userSpecifiedVersion)
-		if err != nil {
-			logger.Println(err.Error())
-			return fallbackMaxVersion
-		}
-		return parsed
-	}
-
-	statefulSet, err := findOperatorStatefulSet(c, namespace)
-	if err != nil {
-		logger.Println(err.Error())
-		return fallbackMaxVersion
-	}
-
-	// we were not able to find a StatefulSet we might be dealing with an ECK operator deployed via OLM
-	if statefulSet == nil {
-		return extractVersionFromDeployment(c, namespace)
-	}
-
-	// since version 1.3 ECK uses standard labels
-	versionLabel := statefulSet.Labels["app.kubernetes.io/version"]
-	parsed, err := version.ParseSemantic(versionLabel)
-	if err == nil {
-		return parsed
-	}
-
-	return extractVersionFromContainers(statefulSet.Spec.Template.Spec.Containers)
-}
-
-func findOperatorStatefulSet(c *kubernetes.Clientset, namespace string) (*appsv1.StatefulSet, error) {
+func findOperatorStatefulSet(c kubernetes.Interface, namespace string) (*appsv1.StatefulSet, error) {
 	// we use the control-plane label since ECK version 1.0
 	ssets, err := c.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "control-plane=elastic-operator"})
 	if err != nil {
@@ -106,21 +73,6 @@ func extractVersionFromContainers(containers []corev1.Container) *version.Versio
 		}
 	}
 	return fallbackMaxVersion
-}
-
-// extractVersionFromDeployment tries to extract version information from a deployment as it is typically used in ECK installations via OLM.
-func extractVersionFromDeployment(c *kubernetes.Clientset, namespace string) *version.Version {
-	deployment, err := c.AppsV1().Deployments(namespace).Get(context.Background(), "elastic-operator", metav1.GetOptions{})
-	if err != nil {
-		logger.Println(fmt.Errorf("operator statefulset not found, checking for OLM deployment but failed: %w", err).Error())
-		return fallbackMaxVersion
-	}
-	v, err := extractVersionFromOLMMetadata(deployment.Labels)
-	if err != nil {
-		logger.Println("ECK operator not found in OLM metadata checking container image as last resort")
-		return extractVersionFromContainers(deployment.Spec.Template.Spec.Containers)
-	}
-	return v
 }
 
 func extractVersionFromOLMMetadata(labels map[string]string) (*version.Version, error) {
