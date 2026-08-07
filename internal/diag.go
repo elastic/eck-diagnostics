@@ -194,7 +194,7 @@ LOOP:
 			"pods",
 			"persistentvolumeclaims",
 			"services",
-			"endpoints",
+			"endpointslices",
 			"configmaps",
 			"controllerrevisions",
 		}))
