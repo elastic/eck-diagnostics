@@ -142,31 +142,6 @@ func extractVersionFromDockerImage(image string) (*version.Version, error) {
 	return fallbackMaxVersion, nil
 }
 
-// k8sEndpointsDeprecatedVersion is the Kubernetes version from which v1 Endpoints is deprecated.
-var k8sEndpointsDeprecatedVersion = version.MustParseSemantic("1.33.0")
-
-// detectK8sVersion returns the Kubernetes server version, falling back to a max version so that
-// callers enabling features on newer clusters err on the side of enabling them.
-func detectK8sVersion(kubectl *Kubectl) *version.Version {
-	client, err := kubectl.factory.ToDiscoveryClient()
-	if err != nil {
-		logger.Printf("failed to create discovery client to detect Kubernetes version: %s\n", err)
-		return fallbackMaxVersion
-	}
-	client.Invalidate()
-	serverVersion, err := client.ServerVersion()
-	if err != nil {
-		logger.Printf("failed to detect Kubernetes version: %s\n", err)
-		return fallbackMaxVersion
-	}
-	v, err := version.ParseSemantic(serverVersion.GitVersion)
-	if err != nil {
-		logger.Printf("failed to parse Kubernetes version %q: %s\n", serverVersion.GitVersion, err)
-		return fallbackMaxVersion
-	}
-	return v
-}
-
 // maxVersion returns the maximum of the given versions.
 func maxVersion(versions []*version.Version) *version.Version {
 	if len(versions) == 0 {
