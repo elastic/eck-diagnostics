@@ -2,16 +2,102 @@
   "extends": [
     "config:recommended"
   ],
+  "labels": [
+    ">renovate"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/tests/**",
+    "**/__fixtures__/**"
+  ],
+  "schedule": [
+    "after 1am on monday"
+  ],
   "packageRules": [
     {
+      "groupName": "all ungrouped dependencies",
       "matchPackageNames": [
-        "k8s.io/api",
-        "k8s.io/apimachinery",
-        "k8s.io/cli-runtime",
-        "k8s.io/client-go",
-        "k8s.io/kubectl"
+        "*"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
       ],
-      "groupName": "k8s"
+      "enabled": true,
+      "postUpdateOptions": [
+        "gomodTidy"
+      ],
+      "matchPackageNames": [
+        "github.com/elastic/{/,}**"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": true,
+      "postUpdateOptions": [
+        "gomodTidy"
+      ],
+      "matchPackageNames": [
+        "*"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin"
+      ],
+      "enabled": true,
+      "postUpdateOptions": [
+        "gomodTidy"
+      ],
+      "matchPackageNames": [
+        "!github.com/elastic/{/,}**"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "enabled": false,
+      "matchPackageNames": [
+        "!github.com/elastic/{/,}**",
+        "!docker.elastic.co/wolfi/{/,}**"
+      ]
+    },
+    {
+      "groupName": "elastic-deps",
+      "matchPackageNames": [
+        "/^github.com/elastic/",
+        "/^go.elastic.co/"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "go",
+        "golang",
+        "docker.io/library/golang",
+        "docker.elastic.co/wolfi/go",
+        "github.com/golangci/golangci-lint"
+      ],
+      "groupName": "go"
+    },
+    {
+      "groupName": "k8s",
+      "matchPackageNames": [
+        "/k8s.io/"
+      ]
     }
-  ]
+  ],
+  "separateMajorMinor": true
 }
