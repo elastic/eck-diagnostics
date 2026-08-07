@@ -101,6 +101,9 @@ func Run(params Params) error {
 		"nodes.json": func(writer io.Writer) error {
 			return kubectl.GetByLabel("nodes", "", filters.Empty, writer)
 		},
+		"namespaces.json": func(writer io.Writer) error {
+			return kubectl.GetByLabel("namespaces", "", filters.Empty, writer)
+		},
 		"podsecuritypolicies.json": func(writer io.Writer) error {
 			return kubectl.GetByLabel("podsecuritypolicies", "", filters.Empty, writer)
 		},
@@ -117,6 +120,7 @@ func Run(params Params) error {
 
 	var operatorLabels []labels.Set
 	operatorVersions := make([]*version.Version, 0, len(params.OperatorNamespaces))
+	operatorInfos := make([]OperatorInfo, 0, len(params.OperatorNamespaces))
 	for _, ns := range params.OperatorNamespaces {
 		// Find the label in use by operator in this namespace and add this to
 		// the set of filters to ensure we always retrieve the objects
@@ -128,11 +132,21 @@ func Run(params Params) error {
 			operatorLabels = append(operatorLabels, operatorLabel)
 		}
 
-		operatorVersions = append(operatorVersions, detectECKVersion(clientSet, ns, params.ECKVersion))
+		info := detectOperatorInfo(clientSet, ns, params.ECKVersion)
+		operatorInfos = append(operatorInfos, info)
+		operatorVersions = append(operatorVersions, info.parsedVersion)
 	}
 
 	maxOperatorVersion := maxVersion(operatorVersions)
 	logVersion(maxOperatorVersion)
+
+	warnMissingNamespaces(clientSet, operatorInfos, params.AllNamespaces())
+
+	zipFile.Add(map[string]func(io.Writer) error{
+		"operators.json": func(w io.Writer) error {
+			return writeOperatorsJSON(w, operatorInfos)
+		},
+	})
 
 	allNamespaces := sets.New(params.ResourcesNamespaces...)
 	allNamespaces.Insert(params.OperatorNamespaces...)
