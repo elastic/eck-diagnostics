@@ -86,6 +86,7 @@
       "matchPackageNames": [
         "go",
         "golang",
+        "actions/go-versions",
         "docker.io/library/golang",
         "docker.elastic.co/wolfi/go",
         "github.com/golangci/golangci-lint"
