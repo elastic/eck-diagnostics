@@ -89,7 +89,7 @@
         "actions/go-versions",
         "docker.io/library/golang",
         "docker.elastic.co/wolfi/go",
-        "github.com/golangci/golangci-lint"
+        "/github.com/golangci/golangci-lint/"
       ],
       "groupName": "go"
     },
@@ -100,5 +100,16 @@
       ]
     }
   ],
-  "separateMajorMinor": true
+  "separateMajorMinor": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        "go install (?<depName>github\\.com/golangci/golangci-lint(?:/v\\d+)?)/cmd/golangci-lint@(?<currentValue>[^\\s]+)",
+        "go install (?<depName>[^@]+)@(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "go"
+    }
+  ]
 }
