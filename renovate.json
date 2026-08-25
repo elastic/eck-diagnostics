@@ -104,7 +104,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^Makefile$"],
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
       "matchStrings": [
         "go install (?<depName>github\\.com/golangci/golangci-lint(?:/v\\d+)?)/cmd/golangci-lint@(?<currentValue>[^\\s]+)",
         "go install (?<depName>[^@]+)@(?<currentValue>[^\\s]+)"
