@@ -28,7 +28,7 @@ RUN make build-binary generate-notice.txt
 #
 # package binaries in a lighter final image
 #
-FROM docker.elastic.co/wolfi/chainguard-base:latest@sha256:019627d1385d91516b720d5f02b6b03b57da9a0da3942ffa3a5be0f7376a9315
+FROM docker.elastic.co/wolfi/chainguard-base:latest@sha256:f8619424418a91c13ba18232bbb3c2e775e48ca0c8dd73650db9c91775116bf9
 
 ARG IMAGE_TAG
 ENV IMAGE_TAG=$IMAGE_TAG
