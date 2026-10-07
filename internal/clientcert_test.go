@@ -114,7 +114,7 @@ func Test_jobTemplate_keystore(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			data := map[string]interface{}{
 				"PodName":             "test-pod",
-				"DiagnosticImage":     "docker.elastic.co/eck-dev/support-diagnostics:latest",
+				"DiagnosticImage":     "docker.elastic.co/support-public/diagnostics:latest",
 				"Namespace":           "default",
 				"ESSecretName":        "es-secret",
 				"ESSecretKey":         "elastic",
