@@ -38,7 +38,7 @@ func Test_jobTemplate_port(t *testing.T) {
 
 	baseData := map[string]any{
 		"PodName":           "test-pod",
-		"DiagnosticImage":   "docker.elastic.co/eck-dev/support-diagnostics:latest",
+		"DiagnosticImage":   "docker.elastic.co/support-public/diagnostics:latest",
 		"Namespace":         "default",
 		"ESSecretName":      "",
 		"ESSecretKey":       "",
@@ -79,7 +79,7 @@ func Test_jobTemplate_port(t *testing.T) {
 func baseTemplateData() map[string]any {
 	return map[string]any{
 		"PodName":           "test-pod",
-		"DiagnosticImage":   "docker.elastic.co/eck-dev/support-diagnostics:latest",
+		"DiagnosticImage":   "docker.elastic.co/support-public/diagnostics:latest",
 		"Namespace":         "default",
 		"ESSecretName":      "es-secret",
 		"ESSecretKey":       "elastic",

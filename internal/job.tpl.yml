@@ -17,7 +17,7 @@ spec:
   containers:
     - name: {{ .MainContainerName }}
       image: {{ .DiagnosticImage }}
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Always
       securityContext:
         runAsNonRoot: true
         allowPrivilegeEscalation: false

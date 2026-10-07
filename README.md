@@ -27,7 +27,7 @@ Usage:
   eck-diagnostics [flags]
 
 Flags:
-      --diagnostic-image string              Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics (default "docker.elastic.co/eck-dev/support-diagnostics:9.3.1")
+      --diagnostic-image string              Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics. Check https://github.com/elastic/support-diagnostics for the latest version. (default "docker.elastic.co/support-public/diagnostics:latest")
       --eck-version string                   ECK version in use, will try to autodetect if not specified
   -f, --filters strings                      Comma-separated list of filters in format "type=name". Example: elasticsearch=my-cluster (Supported types [agent apm beat elasticsearch enterprisesearch kibana maps logstash package-registry autoops-agent stackconfigpolicy])
   -h, --help                                 help for eck-diagnostics
