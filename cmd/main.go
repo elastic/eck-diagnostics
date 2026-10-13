@@ -42,7 +42,7 @@ func main() {
 			return internal.Run(diagParams)
 		},
 	}
-	cmd.Flags().StringVar(&diagParams.DiagnosticImage, "diagnostic-image", internal.DiagnosticImage, "Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics")
+	cmd.Flags().StringVar(&diagParams.DiagnosticImage, "diagnostic-image", internal.DiagnosticImage, "Diagnostic image to be used for stack diagnostics, see run-stack-diagnostics. Check https://github.com/elastic/support-diagnostics for the latest version.")
 	cmd.Flags().BoolVar(&diagParams.RunStackDiagnostics, "run-stack-diagnostics", true, "Run diagnostics on deployed Elasticsearch clusters and Kibana instances, requires deploying diagnostic Pods into the cluster")
 	cmd.Flags().BoolVar(&diagParams.RunAgentDiagnostics, "run-agent-diagnostics", false, "Run diagnostics on deployed Elastic Agents. Warning: credentials will not be redacted and appear as plain text in the archive")
 	cmd.Flags().StringSliceVarP(&diagParams.OperatorNamespaces, operatorNamespaces, "o", []string{"elastic-system"}, "Comma-separated list of namespace(s) in which operator(s) are running")
