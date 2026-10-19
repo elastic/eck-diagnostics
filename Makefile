@@ -52,7 +52,7 @@ generate-notice.txt: $(GOBIN)/go-licence-detector
 # tool dependencies
 
 $(GOBIN)/go-licence-detector:
-	@ go install go.elastic.co/go-licence-detector@v0.10.0
+	@ go install go.elastic.co/go-licence-detector@v0.11.1
 
 $(GOBIN)/golangci-lint:
 	@ go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
