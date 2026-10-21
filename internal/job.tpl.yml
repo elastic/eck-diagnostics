@@ -70,10 +70,10 @@ spec:
             - {{ .OutputDir }}/ready
       resources:
         requests:
-          memory: 20Mi
+          memory: 512Mi
           cpu: 100m
         limits:
-          memory: 2Gi
+          memory: 2560Mi
           cpu: 1
   volumes:
     - name: output

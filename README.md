@@ -173,7 +173,7 @@ spec:
       readOnlyRootFilesystem: true
     resources:
       requests:
-        memory: 64Mi              # override the default 20Mi to satisfy a resource quota
+        memory: 64Mi              # override the default 512Mi to satisfy a resource quota
         cpu: 200m
 ```
 
