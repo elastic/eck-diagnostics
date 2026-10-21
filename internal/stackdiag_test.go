@@ -151,7 +151,7 @@ func Test_renderDiagnosticPod(t *testing.T) {
 				if c == nil {
 					t.Fatal("diagnostic container not found")
 				}
-				want := resource.MustParse("20Mi")
+				want := resource.MustParse("512Mi")
 				got := c.Resources.Requests[corev1.ResourceMemory]
 				if want.Cmp(got) != 0 {
 					t.Errorf("memory request = %v, want %v", got.String(), want.String())
@@ -218,10 +218,10 @@ spec:
 				if wantCPU.Cmp(gotCPU) != 0 {
 					t.Errorf("cpu request = %v, want 200m", gotCPU.String())
 				}
-				wantMemLimit := resource.MustParse("2Gi")
+				wantMemLimit := resource.MustParse("2560Mi")
 				gotMemLimit := c.Resources.Limits[corev1.ResourceMemory]
 				if wantMemLimit.Cmp(gotMemLimit) != 0 {
-					t.Errorf("memory limit = %v, want 2Gi (should be preserved)", gotMemLimit.String())
+					t.Errorf("memory limit = %v, want 2560Mi (should be preserved)", gotMemLimit.String())
 				}
 			},
 		},
@@ -416,9 +416,9 @@ spec:
 				if wantMem.Cmp(c.Resources.Requests[corev1.ResourceMemory]) != 0 {
 					t.Errorf("memory request = %v, want 64Mi", c.Resources.Requests[corev1.ResourceMemory])
 				}
-				wantMemLimit := resource.MustParse("2Gi")
+				wantMemLimit := resource.MustParse("2560Mi")
 				if wantMemLimit.Cmp(c.Resources.Limits[corev1.ResourceMemory]) != 0 {
-					t.Errorf("memory limit = %v, want 2Gi (should be preserved)", c.Resources.Limits[corev1.ResourceMemory])
+					t.Errorf("memory limit = %v, want 2560Mi (should be preserved)", c.Resources.Limits[corev1.ResourceMemory])
 				}
 			},
 		},
