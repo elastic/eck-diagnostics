@@ -252,6 +252,11 @@ LOOP:
 				"stackconfigpolicy",
 			}))
 		}
+		if maxOperatorVersion.AtLeast(elasticsearchAutoscalerMinVersion) {
+			zipFile.Add(getResources(kubectl.GetByName, ns, namespaceFilters, []string{
+				"elasticsearchautoscaler",
+			}))
+		}
 
 		zipFile.Add(map[string]func(io.Writer) error{
 			archive.Path(ns, "secrets.json"): func(writer io.Writer) error {
