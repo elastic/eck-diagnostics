@@ -72,6 +72,9 @@ var (
 
 	// stackConfigPolicyMinVersion is the ECK version in which StackConfigPolicy support has been introduced.
 	stackConfigPolicyMinVersion = version.MustParseSemantic("2.6.0")
+
+	// elasticsearchAutoscalerMinVersion is the ECK version in which the ElasticsearchAutoscaler resource has been introduced.
+	elasticsearchAutoscalerMinVersion = version.MustParseSemantic("2.7.0")
 )
 
 // supportedStackDiagTypes returns the list of stack apps supported by elastic/support-diagnostics.
